@@ -238,6 +238,8 @@ LX Music 的“自定义源”不是放在 `sources/` 目录，而是存在：
 - NVIDIA 580 驱动 + XWayland（应用设置 `force_xwayland: true`）；
 - 软件渲染（llvmpipe + `WEBKIT_SKIA_ENABLE_CPU_RENDERING=1`）**仍然复现**。
 
+> 上游跟踪：#789 / #791 已解释 AppImage 的 GTK 钩子强制 XWayland；本机 deb + `force_xwayland` 的补充报告见 [#1226](https://github.com/dsh-tauri/deepseek-harness-desktop/issues/1226)。
+
 ### 试错矩阵
 
 | # | 尝试 | 结果 | 说明 |
