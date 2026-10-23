@@ -1,0 +1,7 @@
+{
+  "uuid": "grid-density@local",
+  "name": "App Grid Density",
+  "description": "Tighter application grid: smaller icons, less spacing.",
+  "shell-version": ["50"],
+  "version": 1
+}
