@@ -293,6 +293,8 @@ tr '\0' '\n' < /proc/$pid/environ | grep WEBKIT
 
 ## 5.1 DSH 停靠栏 / 应用菜单图标空白
 
+> 上游报告：[dsh-tauri/deepseek-harness-desktop#1227](https://github.com/dsh-tauri/deepseek-harness-desktop/issues/1227)
+
 ### 现象
 
 - deb 版 DSH 启动后，左侧 Dock 只有运行小圆点，图标槽位是空的；
