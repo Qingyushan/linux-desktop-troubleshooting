@@ -511,6 +511,7 @@ billion-context, @changfenhuang/dsh-genui, dshmarket
 - `fix-firefox-s302-ca.sh`：把 S302 根证书导入 Firefox NSS 库（自动找 snap/deb 配置目录）。
 - `fix-steam-s302-ca.sh`：用 NSS 3.98 的 certutil 重新导入 Steam 的 `~/.pki/nssdb`。
 - `fix-dsh-icon.sh`：为 DSH 生成新名字的用户图标并写入用户级 desktop 覆盖，修复 Dock / 应用菜单空白图标（不碰 `/usr/share`，可重复执行）。
+- `install-quiet-startup.sh`：安装 `quiet-startup@local` 扩展 + 3 个 autostart 入口，让 QQ / 微信 / DSH 登录后安静启动（窗口最小化到托盘）；源码在 `gnome-extension/`。
 
 > 使用前先读脚本；都会先备份。
 
@@ -608,21 +609,65 @@ dsh --profile tauri --dump-config | grep -i <plugin>
 
 - 在线源下载的图在 `~/.config/variety/Downloaded`；想离线就只用本地文件夹。
 
-### 12.3 微信 / QQ 开机自启
+### 12.3 QQ / 微信 / DSH 开机「安静」自启（窗口最小化，托盘常驻）
 
-本次已写入：
+目标：登录后三个应用自己起来，但**主窗口不弹出来抢焦点**，托盘里能看到图标，点一下就回来。
 
-- `~/.config/autostart/wechat.desktop`（延迟 5 秒）
-- `~/.config/autostart/qq.desktop`（延迟 10 秒）
+**难点**：QQ、微信 4.x、DSH 桌面端现在都是原生 Wayland 窗口；Wayland 没有"让外部进程最小化别人窗口"的接口（`xdotool` / `wmctrl` 只对 XWayland 窗口有效），所以没法靠"启动后再把窗口藏起来"的脚本。唯一能做这件事的是**跑在 GNOME Shell 进程里的扩展**。
 
-下次登录会自动启动并显示主窗口；不想让它弹窗，在各软件设置里开启“关闭后最小化到托盘”，再把窗口关掉即可。临时取消自启：
+**做法**：一个本地小扩展 `quiet-startup@local` + 三个 autostart 入口。
+
+- 扩展在登录后 150 秒内，凡是新创建、且 `wm_class` / `app_id` 命中名单的窗口 → 立刻 `minimize()`；
+- 每 2 秒复查：应用自己把窗口弹回来，最多再压 3 次；窗口有焦点（说明你正在用）就不抢；
+- 150 秒后彻底放手，之后手动开这些应用、开新的聊天窗口都不受影响。
+
+安装（幂等，可重复执行）：
 
 ```bash
-rm ~/.config/autostart/wechat.desktop
-rm ~/.config/autostart/qq.desktop
+./scripts/install-quiet-startup.sh
 ```
 
-或者把文件里的 `X-GNOME-Autostart-enabled=true` 改成 `false`，保留配置以后再用。
+| 路径 | 作用 |
+| --- | --- |
+| `~/.local/share/gnome-shell/extensions/quiet-startup@local/` | 扩展本体（源码在仓库 `gnome-extension/`） |
+| `~/.config/quiet-startup/config.json` | 窗口期秒数、重试次数、应用名单 |
+| `~/.config/autostart/{wechat,qq,deepseek-harness-desktop}.desktop` | 自启入口，延迟 8 / 12 / 5 秒 |
+| dconf `org.gnome.shell enabled-extensions` | 启用扩展（保留已有的其它扩展） |
+
+**必须注销重登一次**：GNOME Shell 只在自己的启动流程里扫描扩展目录，运行期新加的扩展不会被发现（此时 `gnome-extensions enable` 会报"扩展不存在"，不是配置错了）。
+
+重登后验证：
+
+```bash
+gnome-extensions info quiet-startup@local    # State 应为 ENABLED
+cat /tmp/quiet-startup.log                   # 应出现 minimize(created#1): app=wechat ...
+```
+
+托盘图标：QQ / DSH 走 SNI，由 Ubuntu 自带的 AppIndicator 扩展显示；微信 4.x 内置 SNI 支持，登录后出现在托盘（未登录时只有登录窗口，托盘还没建）。
+
+名单不对（某个应用还是弹窗）时：看日志 `created:` 后面的名字，加进 `config.json` 的 `apps` 数组，再
+
+```bash
+gnome-extensions disable quiet-startup@local && gnome-extensions enable quiet-startup@local
+```
+
+（改配置不用重登，改 `extension.js` 代码才需要重登。）
+
+取消：
+
+```bash
+gnome-extensions disable quiet-startup@local          # 只停"最小化"，自启保留
+sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
+    ~/.config/autostart/{wechat,qq,deepseek-harness-desktop}.desktop   # 连自启一起停
+```
+
+**踩过的坑**：
+
+- 旧 AppImage 时代留下的 `~/.config/autostart/Deepseek Harness Desktop.desktop` 是重复入口，会让 DSH 被拉起两次（第二次激活还会把刚最小化的窗口顶回来）；已挪到 `~/.config/autostart-disabled/`。
+- 别为了"藏窗口"去开 `force_xwayland=true` 或 `GDK_BACKEND=x11`：那等于把 DSH 整个会话换回 XWayland，可能把第 5 节的"只有 resize 才刷新"重新引回来。
+- 别用 `xdotool windowunmap` 硬藏窗口：应用会以为自己仍然可见，之后的焦点/输入行为会变得很怪；`minimize()` 才是正常路径。
+- 微信/QQ 如果没有自动登录，第一次出现的**登录窗口也会被最小化**：点 Dock 图标或托盘菜单里的"显示主面板"即可。
+- 自启入口里带 `X-GNOME-Autostart-Delay` 是为了错开登录瞬间的 IO；DSH 自己设置里的"开机自启"如果被重开，可能把 `Exec` 改回不带延迟的原始命令——窗口仍然会被扩展最小化，不影响结果。
 
 ### 12.4 Steam + S302：先开 S302，再开 Steam
 
@@ -655,6 +700,7 @@ rm ~/.config/autostart/qq.desktop
   ```
 
 - 宠物置顶和渲染流畅有取舍：`force_xwayland=false` 更接近原生 Wayland，但宠物置顶可能失效；按需选。
+- 想登录后安静启动（窗口最小化、只留托盘）见 12.3，别为此改 `force_xwayland`。
 
 ### 12.7 系统小习惯
 
