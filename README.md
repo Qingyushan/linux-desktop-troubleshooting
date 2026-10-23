@@ -558,6 +558,119 @@ dsh --profile tauri --dump-config | grep -i <plugin>
 
 ---
 
+## 12. 好用的玩法技巧（日常使用）
+
+这一节不是排障，而是把这次装好的软件调成“顺手”的配置。按软件分开，命令都可以直接复制。
+
+### 12.1 Rime 雾凇拼音：输入法调顺手
+
+- 切换：`Super+Space` 在“中文键盘 / Rime”之间切；`Shift` 临时中英；`1-9` 选候选，空格上屏，`Esc` 取消。
+- 配置目录：`~/.config/ibus/rime`。改完配置后执行：
+
+  ```bash
+  rime_deployer --build ~/.config/ibus/rime
+  ibus-daemon -drx
+  ```
+
+- 自定义短语：编辑 `~/.config/ibus/rime/custom_phrase.txt`，每行 `词<Tab>拼音<Tab>权重`：
+
+  ```text
+  深度求索	shen du qiu suo	100
+  ```
+
+  保存后重新 deploy，输入 `shendu` 之类就能看到。拼音用空格分音节，不要写声调；权重越大越靠前。
+
+- 换回旧配置：
+
+  ```bash
+  rm -rf ~/.config/ibus/rime
+  mv ~/.config/ibus/rime.bak-20261023-203129 ~/.config/ibus/rime
+  ibus-daemon -drx
+  ```
+
+- 候选框不出现：先确认 `ibus engine` 输出 `rime`；再注销重登，或 `ibus-daemon -drx`。
+
+### 12.2 Variety：壁纸轮换不折腾
+
+- 打开 Variety，在 **Sources** 里添加本地壁纸文件夹；在线源可按需启用 Bing / Unsplash。
+- 在 **Preferences** 里设置切换间隔；NVIDIA 机器如果切换动画卡顿，关闭特效或选“无效果”。
+- 想让壁纸登录后自动轮换，在 Preferences 勾选开机启动；不想自启就取消。
+- 命令行快捷操作：
+
+  ```bash
+  variety --set /home/qys/图片/wallpaper.jpg   # 立刻设置某张
+  variety --next          # 下一张
+  variety --pause         # 暂停轮换
+  variety --preferences   # 打开设置
+  ```
+
+- 在线源下载的图在 `~/.config/variety/Downloaded`；想离线就只用本地文件夹。
+
+### 12.3 微信 / QQ 开机自启
+
+本次已写入：
+
+- `~/.config/autostart/wechat.desktop`（延迟 5 秒）
+- `~/.config/autostart/qq.desktop`（延迟 10 秒）
+
+下次登录会自动启动并显示主窗口；不想让它弹窗，在各软件设置里开启“关闭后最小化到托盘”，再把窗口关掉即可。临时取消自启：
+
+```bash
+rm ~/.config/autostart/wechat.desktop
+rm ~/.config/autostart/qq.desktop
+```
+
+或者把文件里的 `X-GNOME-Autostart-enabled=true` 改成 `false`，保留配置以后再用。
+
+### 12.4 Steam + S302：先开 S302，再开 Steam
+
+- S302 不在运行时，`/etc/hosts` 里指向 `127.0.0.1` 的域名会“连接被拒绝”；先启动 S302，再开 Steam / 浏览器。
+- Steam 商店证书报 `-202` 时，跑仓库里的 `scripts/fix-steam-s302-ca.sh`；Firefox 报 `SEC_ERROR_UNKNOWN_ISSUER` 时跑 `scripts/fix-firefox-s302-ca.sh`。
+- Steam 更新 / 重装后证书可能复发，脚本可以重复跑；跑之前会备份 NSS 库。
+- 界面语言：Steam 设置 → 界面 → 简体中文；或者关闭 Steam 后改 `~/.steam/registry.vdf` 的 `language` 为 `schinese`。
+
+### 12.5 LX Music：音源先备份，再折腾
+
+- 自定义源在 `~/.config/lx-music-desktop/LxDatas/user_api.json`，升级 / 重装前先备份：
+
+  ```bash
+  cp ~/.config/lx-music-desktop/LxDatas/user_api.json \
+     ~/lx-user-api-backup-$(date +%F).json
+  ```
+
+- 换源后如果没声音，先看主进程日志有没有 `load api <名字>`；没有就重新导入。
+- 第三方音源可能失效、可能带风险；只试用，支持正版。
+
+### 12.6 DSH 桌面端：优先 deb，少改全局
+
+- 优先用 `.deb` 版；AppImage 的 GTK 钩子会强制 `GDK_BACKEND=x11`，在 NVIDIA + Wayland 上更容易触发“只有 resize 才刷新”。
+- 出现停绘时，临时拖一下窗口边缘能刷新，但这只是绕过；长期用 `WEBKIT_FORCE_VBLANK_TIMER=1` 启动，或参考第 5 节。
+- 图标空白时跑 `scripts/fix-dsh-icon.sh`；不要再全局改 `~/.local/share/themes` 或应用 CSS，升级会覆盖。
+- 看日志：
+
+  ```bash
+  tail -50 ~/.local/share/dsh-tauri/logs/desktop.log
+  ```
+
+- 宠物置顶和渲染流畅有取舍：`force_xwayland=false` 更接近原生 Wayland，但宠物置顶可能失效；按需选。
+
+### 12.7 系统小习惯
+
+- 改桌面配置前先备份：`cp -a 配置 配置.bak-$(date +%F)`。
+- 查“为什么没生效”：
+
+  ```bash
+  systemctl --user status org.freedesktop.IBus.session.GNOME.service
+  ibus engine
+  journalctl --user -b --no-pager | tail -50
+  ss -tlnp | grep 3080
+  ```
+
+- 改 `/etc/hosts`、证书库、sysctl 这类全局文件，记下原值；S302 退出后记得恢复 hosts。
+- 文档和脚本都在本仓库：`README.md` + `scripts/`；下次遇到同类问题先搜标题，再跑脚本。
+
+---
+
 ## 免责声明
 
 本文记录的是本机排障过程，命令具有破坏性（改证书库、hosts、系统参数）。复现前请备份，并确认你信任本机的中间人工具。音源/第三方插件涉及版权与安全风险，请自行判断。
