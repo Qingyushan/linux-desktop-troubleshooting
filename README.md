@@ -27,6 +27,7 @@
 | 15 | 尚未解决 / 后续 | [15-unresolved.md](docs/15-unresolved.md) | — |
 | 16 | **Windows 分区（176 GB 卷）在「文件」里挂载失败** | [16-windows-dirty-volume.md](docs/16-windows-dirty-volume.md) | —（fstab 只读挂载） |
 | 17 | **G1 盘开机自动挂载；ntfs-3g 与 ntfs3 怎么选** | [17-g1-automount.md](docs/17-g1-automount.md) | —（fstab 挂载） |
+| 18 | **问题覆盖面地图：哪些坑写了、哪些还没写** | [18-coverage-map.md](docs/18-coverage-map.md) | — |
 | — | DSH 档案调优（缩放、插件去重、侧栏空按钮） | [dsh-profile-tuning.md](docs/dsh-profile-tuning.md) | [dsh/profile-config/](dsh/profile-config/) |
 | — | **经验总结（方法、教训、我犯过的错）** | [lessons.md](docs/lessons.md) | — |
 
