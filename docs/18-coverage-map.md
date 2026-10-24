@@ -80,63 +80,44 @@
 | 打印 / 扫描 | [27](27-printing-scanning.md) | CUPS 2.4.16 active、avahi active、simple-scan 已装 |
 | 触摸板 / 手势 | [28](28-touchpad.md) | tap-to-click=true、natural-scroll=true、libinput quirks 目录 |
 
-## 2.1 仍然空白（按领域分组，附本机现状）
+## 2.1 可写：已有实测依据的候选
 
-判断依据是「本机实际有、或早晚会遇到」；单纯"别人可能会踩"的不列。优先级：★★★ 值得先写 / ★★☆ 有场景再写 / ★☆☆ 暂不写。
+下列每一条我都已经在机器上取到了真实数据，**写的时候不用编**。优先级按「本机会不会很快遇到」。
 
-### A. 显示与远程
+| 优先级 | 领域 | 本机实测数据 | 第一篇该写什么 |
+|---|---|---|---|
+| ★★★ | **远程桌面（RDP）** | `gnome-remote-desktop` 已装；`grdctl status` → `Unit status: inactive`、`RDP: Status: disabled`、`Port: 3389` | 用 `grdctl` 开 RDP、`gnome-connections` 连、与旧 VNC 的区别；Wayland 下 VNC 为何失效 |
+| ★★★ | **系统备份（ext4 + rsync）** | 根分区 ext4 **29G/73G（42%）**；`/home/qys` **11G**；G1 **837G/932G（90%）**；`rsync` 已装；`timeshift` 可装（25.12.4） | rsync 增量备份脚本、排除清单、为什么备份**不能**放已 90% 的 G1 |
+| ★★★ | **系统更新策略** | `unattended-upgrades 2.12ubuntu9` 已装且 **enabled**；`50unattended-upgrades` 用默认 Allowed-Origins | 它到底会自动装什么、怎么只留安全更新、怎么 `apt-mark hold` 内核与 nvidia |
+| ★★☆ | **日志与 journal 瘦身** | `journalctl --disk-usage` = **72M**；`/var/log/journal` 未设 `SystemMaxUse` | 按大小/时间修剪、持久化配置、rsyslog 与 journald 的分工 |
+| ★★☆ | **电池健康数据怎么读** | `BAT0`：`CAPACITY=100`、`CYCLE_COUNT=0`、`charge_full=4800000 µAh` vs `charge_full_design=4400000 µAh`；**`upower` 反而显示 `0% (should be ignored)`** | 为什么 upower 与 sysfs 不一致、以哪个为准、续航腰斩时先看什么 |
+| ★★☆ | **零依赖读温度** | `/sys/class/thermal/thermal_zone{0..3}/temp` = **56/56/45/56 ℃**（没装 lm-sensors 也能读） | 不装包先看温度、`lm-sensors`（3.6.2 可装）补齐风扇与电压、`nvidia-smi` 的 GPU 温度 |
+| ★★☆ | **磁盘健康（SMART）** | `smartmontools` **未装**，可装版本 7.5-2；根分区在 NVMe | 装完 `smartctl -a` 看哪些字段（NVMe 的 Percentage Used / Media Errors），`badblocks` 为什么别对 SSD 用 |
+| ★★☆ | **密钥与密钥环** | `~/.ssh` 只有 `authorized_keys`（**无私钥**）；GPG 私钥 **0 个**；`~/.local/share/keyrings/` 有 `login.keyring`、`user.keystore` | 新机器恢复 SSH/GPG 密钥、`ssh-agent` 与 systemd user service、"解锁密钥环"弹窗的处理 |
+| ★★☆ | **防火墙现状** | `ufw 0.36.2` 已装且 **active**（规则需 root 读） | `ufw` 默认策略、怎么确认 3389/631 是否放行、`ss -ltnp` 与 ufw 的对应关系 |
+| ★☆☆ | **摄像头** | `/dev/video0`、`/dev/video1` 存在（内置摄像头） | `libcamera`/V4L2 区别、Wayland 应用调摄像头走 portal、黑屏时先看权限 |
 
-| 优先级 | 领域 | 典型症状 | 第一篇该写什么 | 本机现状 |
-|---|---|---|---|---|
-| ★★★ | **远程桌面（RDP/VNC）** | 想从另一台机器连进来；Wayland 下 VNC 方案失效 | `gnome-remote-desktop` + `grdctl` 开启 RDP、gnome-connections 连接、与旧 VNC 的区别 | **已装** `gnome-remote-desktop`，`grdctl` 可用；尚未写过 |
-| ★★☆ | **外接显示器 / 多屏缩放** | 接上显示器后缩放不一致、窗口跑屏、热插拔不识别 | `gnome-monitor-config` / Mutter 的 fractional scaling、`xrandr` 在 Wayland 下的边界 | 5 个 DRM 连接器，**只有 eDP-1 连接**（未接外屏） |
-| ★☆☆ | **显示器色温 / 夜灯 / HDR** | 偏色、夜间刺眼、HDR 不生效 | GNOME 夜灯、`colord` 配置、HDR 需要合成器+显卡支持 | 未遇到 |
+## 2.2 不写：缺硬件或环境，硬写只会抄
 
-### B. 存储与备份
+| 领域 | 缺什么 | 结论 |
+|---|---|---|
+| **多屏缩放 / 外接显示器** | 5 个 DRM 连接器里**只有 eDP-1 连着**，DP/HDMI 全 disconnected | 没接过外屏，缩放不一致的现象只能抄别人；等真接了屏、踩到了再写 |
+| **指纹登录** | 无指纹设备（`fprintd` 未装、无对应 USB 设备） | 不写 |
+| **HDR / 广色域** | 无 HDR 显示器 | 不写 |
+| **专业音频（JACK/低延迟）** | 只有板载 ALC269VC + HDMI，无音频接口/声卡 | 不写；普通音频已由 [19](19-audio-pipewire.md) 覆盖 |
+| **容器 / 虚拟机** | `docker`、`podman`、`virt-manager` **均未安装**，也没有使用计划 | 不写；真要用时再按当时的报错写 |
+| **Windows 侧排障** | 不是本仓库范围（见第 3 节） | 仅在与 Linux 挂载相关时提及（[16](16-windows-dirty-volume.md)） |
 
-| 优先级 | 领域 | 典型症状 | 第一篇该写什么 | 本机现状 |
-|---|---|---|---|---|
-| ★★★ | **系统备份与快照** | 想回滚一次坏更新 / 误删文件 | ext4 下用 `rsync` 做增量备份、`timeshift` 的取舍；btrfs 快照为何不适用本机 | 根分区 **ext4**，无 timeshift、无 btrfs；`rsync` 有 |
-| ★★☆ | **磁盘健康（SMART）** | 怀疑盘要坏、读写卡顿 | `smartctl -a`、NVMe 健康字段、`badblocks` 的正确用法（别对 SSD 跑） | **smartctl 未装** |
-| ★★☆ | **磁盘空间与 inode** | 明明有空间却写不进去 | `df -h` vs `df -i`、`du` 找大目录、`ncdu`、日志/缓存占用 | 未遇到 |
-| ★☆☆ | **外置盘热插拔策略** | 拔出前忘记卸载导致脏卷 | `udisksctl`/`eject`、`sync`、NTFS 脏标记的后果（已由 [16](16-windows-dirty-volume.md) 部分覆盖） | 已有 G1 常驻挂载 |
+## 2.3 已健康，无需专门写
 
-### C. 系统维护
+| 项 | 实测 | 说明 |
+|---|---|---|
+| 时间同步 | `NTP=yes`、`NTPSynchronized=yes`、`RTC time == UTC` | 正常，没有踩坑经验可写 |
+| 电源配置 | `mem_sleep = s2idle [deep]`、`performance` 档 | 已写进 [23](23-power-suspend.md) |
+| 网络 | `wlp3s0` 已连、resolved 工作正常 | 已写进 [24](24-wifi-dns.md) |
+| 字体中文 | `fc-match sans-serif:lang=zh` → **SC** | 刚修完，已写进 [26](26-fonts.md) |
 
-| 优先级 | 领域 | 典型症状 | 第一篇该写什么 | 本机现状 |
-|---|---|---|---|---|
-| ★★★ | **系统更新策略** | 想只装安全更新、或不想被内核更新打断 | `unattended-upgrades` 配置、`apt-mark hold` 内核/nvidia、`apt list --upgradable` 的先看什么 | 未配置 |
-| ★★☆ | **日志与 journal 瘦身** | `/var/log` 涨到几 GB | `journalctl --vacuum-size`、`SystemMaxUse`、rsyslog 与 journald 的关系 | journal 当前 **72 MB** |
-| ★★☆ | **时间同步与证书** | 时间漂移导致 TLS/证书报错 | `timedatectl`、NTP 源、RTC 与 UTC 的关系 | 正常（`Asia/Shanghai`，RTC=UTC） |
-| ★☆☆ | **包回滚 / 降级** | 升级后某包行为变了 | `apt install pkg=version`、`apt-mark hold`、`/var/cache/apt/archives` | 部分由 [22](22-nvidia-kernel-update.md) 覆盖 |
-
-### D. 硬件
-
-| 优先级 | 领域 | 典型症状 | 第一篇该写什么 | 本机现状 |
-|---|---|---|---|---|
-| ★★☆ | **温度 / 风扇 / 降频** | 风扇狂转、性能掉、烫手 | `lm-sensors` 安装与 `sensors`、`thermald`、`nvidia-smi` 温度、`cpupower` | **lm-sensors 未装** |
-| ★★☆ | **电池健康** | 续航突然腰斩 | `upower -i` 的 capacity/cycles、`/sys/class/power_supply/BAT0/`、校准 | 有 `BAT0`，未记录健康值 |
-| ★☆☆ | **键盘背光 / 快捷键** | Fn 键无效、多媒体键不对 | `libinput`、`/usr/lib/udev/hwdb.d`、GNOME 快捷键冲突 | 未遇到 |
-| ★☆☆ | **指纹 / 摄像头** | 指纹录入失败、摄像头黑 | `fprintd`、`libcamera`、Wayland 下摄像头权限 | 未遇到 |
-
-### E. 账户与安全
-
-| 优先级 | 领域 | 典型症状 | 第一篇该写什么 | 本机现状 |
-|---|---|---|---|---|
-| ★★☆ | **密钥环 / 密码提示循环** | 登录后反复弹"解锁密钥环" | GNOME Keyring 与 PAM 的衔接、`seahorse` 重置、autologin 的影响 | 未遇到 |
-| ★★☆ | **SSH / GPG 密钥** | 新机器恢复密钥、ssh-agent 不自动加载 | 密钥文件权限、`ssh-agent` 与 systemd user service、GPG 与 git 签名 | 未整理 |
-| ★☆☆ | **防火墙** | 想确认 631/3389 等端口是否放行 | `ufw` 基础规则、`ss -ltnp` 看监听 | 未确认状态 |
-
-### F. 开发环境
-
-| 优先级 | 领域 | 典型症状 | 第一篇该写什么 | 本机现状 |
-|---|---|---|---|---|
-| ★★☆ | **容器 / 虚拟机** | 想跑 Docker 或 KVM，与 snap/AppArmor 冲突 | `docker` 与 `podman` 取舍、cgroup v2、AppArmor profile、`virt-manager` | **均未安装** |
-| ★★☆ | **代理 / VPN** | 部分应用不走系统代理 | `HTTP_PROXY` 与 GNOME 代理、`proxychains`、WireGuard/OpenVPN 与 resolved 的 DNS 泄漏 | 本机有 S302 中间人场景（[01](01-firefox-github-cert.md)） |
-| ★☆☆ | **语言运行时 / 版本管理** | 多版本 Node/Python 并存冲突 | `mise`/`asdf`/`pyenv` 的 PATH 顺序、与系统包的边界 | 未整理 |
-| ★☆☆ | **专业音频（JACK/低延迟）** | 录音爆音、延迟高 | PipeWire 的 JACK 兼容层、`pw-jack`、realtime 权限 | 未涉及 |
-
-> 这些条目的共同点：**本机要么没装对应软件，要么还没踩到**。写文档的价值在于"下次真遇到时不用从零搜"，所以优先级按「会不会很快遇到」排，而不是按"话题是否热门"排。
+> 原则：**能实测的才写，能复现的才写**。缺硬件的条目留在上表里当"未来清单"，但不占用编号——编号留给真踩过的坑。
 
 ## 3. 这仓库**不打算**覆盖的
 
