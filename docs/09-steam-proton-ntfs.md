@@ -1,6 +1,6 @@
 # Steam / Proton 在 NTFS 库上的「兼容性工具失败」与启动即退
 
-> 返回索引：[README](../README.md) ｜ 原始位置：§12.4（含 12.4.1~12.4.4） ｜ 相关脚本：`../scripts/switch-g1-to-ntfs3g.sh`、`../scripts/fix-steam-ntfs-library.sh`、`../scripts/proton-tools-on-ext4.sh`、`../scripts/move-proton-app-to-ext4.sh`
+> 返回索引：[README](../README.md) ｜ 另见：第 17 篇（[G1 开机自动挂载与 ntfs3/ntfs-3g 取舍](17-g1-automount.md)） ｜ 原始位置：§12.4（含 12.4.1~12.4.4） ｜ 相关脚本：`../scripts/switch-g1-to-ntfs3g.sh`、`../scripts/fix-steam-ntfs-library.sh`、`../scripts/proton-tools-on-ext4.sh`、`../scripts/move-proton-app-to-ext4.sh`
 
 
 - S302 不在运行时，`/etc/hosts` 里指向 `127.0.0.1` 的域名会“连接被拒绝”；先启动 S302，再开 Steam / 浏览器。
