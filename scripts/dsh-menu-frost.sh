@@ -56,7 +56,9 @@ mat = "." + m.group(1)
 block = f"""
 
 /* ===== DSH 定制：菜单毛玻璃（重放：scripts/dsh-menu-frost.sh）=====
-   透明 {alpha}（越大越实）、模糊 {blur}px。改了数字后重跑脚本。 */
+   透明 {alpha}（越大越实）、模糊 {blur}px。改了数字后重跑脚本。
+   同时把 --dsw-specific-menu 提到不透明：卡片/浮层用它做底色，
+   保留 94% 半透明会在 WebKit 里透出下层文字。 */
 {mat}{{
   background-color: rgba(248,249,250,{alpha}) !important;
   backdrop-filter: blur({blur}px) saturate(150%) !important;
@@ -65,6 +67,8 @@ block = f"""
 body[data-ds-dark-theme] {mat}{{
   background-color: rgba(67,69,74,{alpha}) !important;
 }}
+body{{--dsw-specific-menu:#f8f9fa !important}}
+body[data-ds-dark-theme]{{--dsw-specific-menu:#303136 !important}}
 """
 p.write_text(text + block)
 print("applied", mat)

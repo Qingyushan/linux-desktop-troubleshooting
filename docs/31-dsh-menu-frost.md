@@ -115,6 +115,19 @@ scripts/dsh-menu-frost.sh --remove   # 恢复主题原样
 
 生效：浏览器 `Ctrl+Shift+R` 硬刷新；客户端 `Ctrl+R` 或退出重开（客户端是 3080 宿主，会断开几秒）。
 
+### 3.1 卡片/子智能体：另一个 token
+
+菜单之外，聊天流里的「旁问专家 / 子智能体」卡片用的是 `--dsw-specific-menu`
+（主题里 `#303136f0` = 94%，且没有 backdrop-filter）。它不在 `.material` 覆盖范围内，
+94% 在客户端和网页端看起来仍然“透出下层文字”。脚本一并把它提成实色：
+
+```css
+body{--dsw-specific-menu:#f8f9fa !important}                     /* 浅色 */
+body[data-ds-dark-theme]{--dsw-specific-menu:#303136 !important}  /* 深色 */
+```
+
+实测（客户端 + Firefox 网页端一致）：卡片不再透，菜单仍是 65% + 28px 毛玻璃。
+
 ### 4. 验证（两种主题都测）
 
 无头 Chrome 里 `Emulation.setEmulatedMedia` 切 `prefers-color-scheme`，再点开菜单读计算样式，期望：
