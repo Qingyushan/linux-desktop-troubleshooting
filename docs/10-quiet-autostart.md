@@ -14,6 +14,7 @@
   1. 窗口名：`wm_class` / `app_id`，精确比对 + 长标识（≥4 字符）包含匹配；
   2. 进程兜底：`win.get_pid()` → 读 `/proc/<pid>/cmdline`，命中 `/opt/qq/qq`、`wechat`、`deepseek-harness-desktop`；
 - 首次命中即使窗口带着焦点也压下去（登录时 autostart 窗口通常自带焦点）；
+- **只管启动阶段出现的窗口**：从扩展 enable 起 `startupPhaseSeconds`（默认 45 秒）内第一次看到的窗口才可能被压；之后出现的窗口（你手动开 QQ、QQ 自己新建聊天窗）**一律不管**——否则登录后 5 分钟内你开一次 QQ 就被收一次；
 - **短暂的"自动登录宽限"**：从该窗口第一次被压算起 `focusGraceSeconds`（默认 10 秒）内，即使窗口有焦点也继续压，用来覆盖 QQ / 微信自动登录完成后自己把面板顶回来的几下；
 - **超出宽限后，窗口一拿到焦点就永久让位**（内部记 `yielded`），之后无论它怎么失焦、怎么切换都再也不碰它 —— 这样你正在用的时候不会被反复收回；
 - 同一窗口两次压制至少间隔 `minRetryGapSeconds`（默认 2 秒），避免 500ms 的扫描节奏把应用连击；
@@ -117,7 +118,29 @@ sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
 
 > 顺带记一个常被误解的点：**autostart 入口不是常驻脚本**。`~/.config/autostart/*.desktop` 的 `Exec` 就是应用本身（如 `/opt/QQ/qq`），启动完就退出，没有后台进程；维持"登录后别弹窗"的是 GNOME Shell 扩展，它在 `loginWindowSeconds`（300 秒）后自己 disarm，日志里会打印 `disarm: login window elapsed`，之后完全不再扫描窗口。
 
-**踩过的坑**：
+**复盘四：重启后 QQ 仍被反复收回（17:18 那次开机）**
+
+新逻辑（焦点=让位）确实生效了，日志里有 `yield:` 和 `disarm:`，但仍然出问题：
+
+```
+[17:23:41] created: pid=4253 names=qq
+[17:23:41] minimize(created#1): app=qq     ← 用户自己开 QQ，被当成自启窗口
+[17:23:46] minimize(scan#2): app=qq
+[17:23:49] minimize(scan#3): app=qq
+[17:23:52] yield: 窗口已由用户接管          ← 让位生效
+[17:24:01] created: pid=4253 names=qq
+[17:24:01] minimize(created#1): app=qq     ← 同进程新建窗口，又重新开始压
+[17:24:01] disarm: login window elapsed
+```
+
+两个漏洞：
+
+1. **"第一次看到就压"没有时间边界**：`loginWindowSeconds=300` 意味着登录后 5 分钟内，任何新出现的匹配窗口都会被当自启窗口压掉。用户 4 分半时自己开 QQ，立刻被收走。
+2. **让位只按窗口记，不按进程记**：接管了窗口 A，QQ 又新建窗口 B，B 没有 yield 标记，于是从头再压一遍。
+
+修法：加 `startupPhaseSeconds`（默认 45 秒）只接管启动阶段的窗口；让位改成按 pid 记（`_yieldedPids`），该程序之后新建的窗口一律不碰。
+
+**踩过的坑**：**踩过的坑**：
 
 - 旧 AppImage 时代留下的 `~/.config/autostart/Deepseek Harness Desktop.desktop` 是重复入口，会让 DSH 被拉起两次（第二次激活还会把刚最小化的窗口顶回来）；已挪到 `~/.config/autostart-disabled/`。
 - 别为了"藏窗口"去开 `force_xwayland=true` 或 `GDK_BACKEND=x11`：那等于把 DSH 整个会话换回 XWayland，可能把 [05-dsh-render-freeze.md](05-dsh-render-freeze.md) 里的"只有 resize 才刷新"重新引回来。
@@ -126,6 +149,8 @@ sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
 - 自启入口里带 `X-GNOME-Autostart-Delay` 是为了错开登录瞬间的 IO；DSH 自己设置里的"开机自启"如果被重开，可能把 `Exec` 改回不带延迟的原始命令——窗口仍然会被扩展最小化，不影响结果。
 - 改完 `extension.js` **必须重新登录**才生效：GNOME 45+ 用 ESM 加载扩展，`gnome-extensions disable/enable` 会复用模块缓存，改了代码也不会重新读（实测日志里还是旧格式）。改 `config.json` 则只需 disable/enable。
 - autostart 应用的窗口在登录阶段本来就会带焦点，「有焦点就让位」不能当通用规则用；正确做法是"刚压过就无视焦点、隔久了才让位"（`focusGraceSeconds`）。
+- "第一次看到就压"必须有时间边界，否则用户登录后几分钟内自己打开应用也会被压——见 `startupPhaseSeconds`。
+- "让位"要按 **pid** 记，不能只按窗口记：应用新建窗口会重置一切，用户会感觉"又来了"。
 - 但"刚压过就无视焦点"如果做成**滑动**宽限，就会变成 500ms 一次的连击。正确做法是：宽限只从首次压制起算，且宽限结束后**焦点 = 永久让位**，两次压制之间再加最小间隔。
 - 别用"窗口有焦点就不压"当作首次命中的条件：autostart 的窗口本来就会拿焦点，加了这条等于一个都不压。正确做法是首次命中照压、只在"用户还原后"让位。
 

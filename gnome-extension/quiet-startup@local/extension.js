@@ -38,6 +38,9 @@ const NAME_RECHECK_MS = 250;
 
 const DEFAULTS = {
     loginWindowSeconds: 300,
+    // 从 enable 起多久之内"第一次看到"的窗口才归扩展管（秒）。
+    // 超时后新出现的窗口一律不管：那是用户自己开的，不是开机自启。
+    startupPhaseSeconds: 45,
     maxRetries: 5,
     // 从"首次压制"起算的短暂宽限（秒）：这段时间内无视焦点继续压，
     // 覆盖 QQ / 微信 自动登录后把窗口顶回来的几下。
@@ -69,6 +72,9 @@ export default class QuietStartupExtension extends Extension {
         this._apps = this._cfg.apps.map(a => `${a}`.toLowerCase());
         this._procs = this._cfg.processes.map(p => `${p}`.toLowerCase());
         this._maxRetries = Math.max(0, Number(this._cfg.maxRetries) || 0);
+        this._phaseUs = Math.max(0, Number(this._cfg.startupPhaseSeconds) || 0) * 1000000;
+        this._phaseDeadline = GLib.get_monotonic_time() + this._phaseUs;
+        this._yieldedPids = new Set();
         this._graceUs = Math.max(0, Number(this._cfg.focusGraceSeconds) || 0) * 1000000;
         this._minGapUs = Math.max(0, Number(this._cfg.minRetryGapSeconds) || 0) * 1000000;
         this._deadline = GLib.get_monotonic_time()
@@ -154,6 +160,10 @@ export default class QuietStartupExtension extends Extension {
         if (win.minimized)
             return;
 
+        const pid = this._pid(win);
+        if (pid && this._yieldedPids.has(pid))
+            return;
+
         const handled = this._states.get(win);
         if (handled && handled.retries > 0) {
             // 用户已经接管过这个窗口：永久不再碰它
@@ -169,7 +179,9 @@ export default class QuietStartupExtension extends Extension {
             // 宽限期内不看焦点，只用来覆盖应用自动登录后自己顶回来的几下。
             if (!inGrace && win.has_focus?.() === true) {
                 handled.yielded = true;
-                this._log(`yield: 窗口已由用户接管，之后不再压制 names=${this._names(win).join('|') || '-'}`);
+                if (pid)
+                    this._yieldedPids.add(pid);
+                this._log(`yield: 窗口已由用户接管，之后不再压制该程序的任何窗口 names=${this._names(win).join('|') || '-'} pid=${pid || '-'}`);
                 return;
             }
             // 防连击：两次压制之间至少隔 minRetryGapSeconds
@@ -180,6 +192,15 @@ export default class QuietStartupExtension extends Extension {
         const hit = this._match(win);
         if (!hit)
             return;
+
+        // 启动阶段之外的"新窗口"一律不管：那是用户自己开的，不是开机自启
+        if (GLib.get_monotonic_time() > this._phaseDeadline && !(this._states.get(win)?.retries > 0)) {
+            if (!this._lateLogged) {
+                this._lateLogged = true;
+                this._log(`skip-late: 启动阶段已过，不再接管新窗口 names=${this._names(win).join('|') || '-'}`);
+            }
+            return;
+        }
 
         const state = this._state(win);
         try {
