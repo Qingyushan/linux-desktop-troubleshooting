@@ -512,6 +512,7 @@ billion-context, @changfenhuang/dsh-genui, dshmarket
 - `fix-steam-s302-ca.sh`：用 NSS 3.98 的 certutil 重新导入 Steam 的 `~/.pki/nssdb`。
 - `fix-dsh-icon.sh`：为 DSH 生成新名字的用户图标并写入用户级 desktop 覆盖，修复 Dock / 应用菜单空白图标（不碰 `/usr/share`，可重复执行）。
 - `install-quiet-startup.sh`：安装 `quiet-startup@local` 扩展 + 3 个 autostart 入口，让 QQ / 微信 / DSH 登录后安静启动（窗口最小化到托盘）；源码在 `gnome-extension/`。
+- `fix-steam-ntfs-library.sh`：把 Steam 库路径对齐到开机挂载点、清掉同一块 NTFS 盘的重复挂载，修「兼容性工具失败」的复发根源。
 
 > 使用前先读脚本；都会先备份。
 
@@ -706,6 +707,57 @@ sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
 - Steam 商店证书报 `-202` 时，跑仓库里的 `scripts/fix-steam-s302-ca.sh`；Firefox 报 `SEC_ERROR_UNKNOWN_ISSUER` 时跑 `scripts/fix-firefox-s302-ca.sh`。
 - Steam 更新 / 重装后证书可能复发，脚本可以重复跑；跑之前会备份 NSS 库。
 - 界面语言：Steam 设置 → 界面 → 简体中文；或者关闭 Steam 后改 `~/.steam/registry.vdf` 的 `language` 为 `schinese`。
+
+#### 12.4.1 启动游戏报「兼容性工具失败」
+
+现象：点「开始游戏」立刻弹窗 `启动此游戏时发生错误：兼容性工具失败`，游戏根本没起来（本次是《米塔 MiSide》，Windows 游戏，走 Proton Experimental）。
+
+**日志先看 `compat_log.txt`**，一行就能定性：
+
+```bash
+grep -nE "unsupported version|Loaded manifest|StartSession" ~/.steam/steam/logs/compat_log.txt | tail
+```
+
+本次的关键行：
+
+```
+[12:35:22] Registering tool proton_experimental, AppID 1493710
+[12:35:22] Registering tool steamlinuxruntime_4, AppID 4183110
+   # ← 注意：这次启动没有 "Loaded manifest for tool ..." 行
+[12:37:57] Tool 1493710 "Proton Experimental" unsupported version 0.
+```
+
+**根因**：不是游戏坏了，也不是 Proton 文件坏了 —— 是 Steam 这次启动时**没读到** Proton / Steam Linux Runtime 的 `toolmanifest.vdf`，于是把这些兼容性工具登记成 `version 0`，之后任何启动请求都被拒。重启 Steam 后同一批工具正常打印 `Loaded manifest for tool 1493710.`，错误消失，游戏能进。
+
+**修复（一条重启就够）**：
+
+```bash
+~/.steam/debian-installation/steam.sh -shutdown
+nohup setsid ~/.steam/debian-installation/steam.sh >/dev/null 2>&1 &
+# 40 秒后确认工具清单读到了：
+grep "Loaded manifest for tool 1493710" ~/.steam/steam/logs/compat_log.txt | tail -1
+```
+
+**为什么读不到 / 怎么防复发**：本机 Steam 库在 NTFS 盘（`/dev/sda2`，ntfs3）上，Proton 和 Steam Linux Runtime 也躺在这块盘里。同一块盘当时还被 `fstab`（`/mnt/G1`）和 `udisks`（`/run/media/qys/G1`）**各挂了一份**，Steam 用的是 `/run/media/...` 这条随时可能消失的路径。做法：
+
+```bash
+./scripts/fix-steam-ntfs-library.sh --dry-run   # 先看会改什么
+./scripts/fix-steam-ntfs-library.sh             # 对齐库路径到 /mnt/G1，卸掉重复挂载，重启 Steam
+```
+
+> 会关掉 Steam（游戏会退出），跑之前先存档。
+
+**顺手能做的自检**：
+
+```bash
+# 容器本身是否健康（只跑 /usr/bin/true，不动游戏）
+"/run/media/qys/G1/SteamLibrary/steamapps/common/SteamLinuxRuntime_4/_v2-entry-point" \
+  --verb=run -- /usr/bin/true && echo "SLR4 OK"
+# Proton 官方的说法：工具"损坏或不完整"时先验证完整性，并避开非 Linux 原生文件系统
+# https://github.com/ValveSoftware/steam-for-linux/issues/12655
+```
+
+**长期建议**：NTFS 上的 Steam 库能跑（本次 Wine 前缀就建在 NTFS 上，372 MB，游戏正常启动），但 Valve 明确只支持 Linux 原生文件系统。Proton 游戏一多、或再来一次「兼容性工具失败」，把库迁到 ext4 分区是最省心的。
 
 ### 12.5 LX Music：音源先备份，再折腾
 
