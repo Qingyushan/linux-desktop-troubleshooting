@@ -3,22 +3,25 @@ import GLib from 'gi://GLib';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 /**
- * Quiet Startup：登录后一段时间内，把指定应用的窗口直接最小化。
+ * Quiet Startup：登录后一段时间内，把指定应用的窗口最小化（只留托盘图标）。
  *
  * 为什么用扩展而不是 xdotool：
- *   QQ / 微信走 XWayland，还能用 xdotool 操控；但 DSH 桌面端是原生 Wayland 窗口，
- *   Wayland 下任何外部进程都无法最小化别人的窗口（没有 wlr-foreign-toplevel 之类接口），
- *   只有跑在 GNOME Shell 进程里的扩展能调用 MetaWindow.minimize()。
+ *   QQ / 微信 / DSH 桌面端现在都是原生 Wayland 窗口；Wayland 没有 wlr-foreign-toplevel
+ *   之类的接口，外部进程（xdotool / wmctrl）只能操控 XWayland 窗口。只有跑在 GNOME
+ *   Shell 进程里的扩展能调用 MetaWindow.minimize()。
  *
- * 工作方式：
- *   - enable() 时（登录时 shell 启动阶段）记下截止时间，此后 loginWindowSeconds 秒内，
- *     凡是新创建、且 wm_class / app_id 命中 apps 列表的窗口 -> 立刻 minimize()。
- *   - 每 2 秒复查一次：窗口被应用自己"弹回来"就再压回去（最多 maxRetries 次）；
- *     如果窗口当前有焦点（说明是你手动还原并正在用），就不抢。
- *   - 到期自动停止复查，之后手动启动这些应用完全不受影响。
- *   - shell 启动早于 autostart 应用，所以 QQ/微信/DSH 的窗口一定在期限内创建。
+ * 匹配为什么有两条路：
+ *   1) 窗口名（wm_class / app_id）—— QQ 走 XWayland，窗口一创建就有 WM_CLASS；
+ *   2) 进程 pid -> /proc/<pid>/cmdline —— 原生 Wayland 窗口在 window-created 触发时
+ *      app_id 往往还没提交（实测日志里是 `(no name)`），此时只能靠 pid 判断归属。
+ *   另外每 500ms 把所有窗口重扫一遍，这样 app_id 晚一两帧提交也能补上。
  *
- * 配置：~/.config/quiet-startup/config.json（可选，改完 disable/enable 生效）
+ * 时序：登录窗口期内（默认 150 秒）
+ *   - 首次命中：立刻 minimize()，即使窗口自带焦点（登录时 autostart 窗口通常有焦点）；
+ *   - 已处理过的窗口被应用自己弹回来：窗口没有焦点时再压，最多 maxRetries 次；
+ *   - 到期彻底放手，之后手动开这些应用、开新聊天窗口都不受影响。
+ *
+ * 配置：~/.config/quiet-startup/config.json（改完 disable/enable 生效，不用重登）
  * 日志：/tmp/quiet-startup.log
  */
 
@@ -26,12 +29,14 @@ const CONFIG_PATH = GLib.build_filenamev([
     GLib.get_home_dir(), '.config', 'quiet-startup', 'config.json',
 ]);
 const LOG_PATH = '/tmp/quiet-startup.log';
+const SCAN_INTERVAL_MS = 500;
+const NAME_RECHECK_MS = 250;
 
 const DEFAULTS = {
     loginWindowSeconds: 150,
     maxRetries: 3,
-    // 匹配标识：先精确比对 wm_class / app_id，再做「长度 >= 4 且被包含」的模糊匹配。
-    // 短标识（如 qq）只做精确匹配，避免误伤 qqmusic 之类。
+    // 窗口名标识：先精确比对 wm_class / app_id，再做「长度 >= 4 且被包含」的模糊匹配
+    // （覆盖 com.tencent.wechat / wechat-beta 这类变体；短标识如 qq 只做精确匹配）
     apps: [
         'deepseek-harness-desktop',
         'deepseek-harness',
@@ -41,36 +46,52 @@ const DEFAULTS = {
         'weixin',
         'xwechat',
     ],
+    // 进程命令行片段（小写），pid 兜底匹配用
+    processes: [
+        '/opt/qq/qq',
+        'wechat',
+        'deepseek-harness-desktop',
+    ],
 };
 
 export default class QuietStartupExtension extends Extension {
     enable() {
         this._cfg = this._readConfig();
         this._apps = this._cfg.apps.map(a => `${a}`.toLowerCase());
+        this._procs = this._cfg.processes.map(p => `${p}`.toLowerCase());
         this._maxRetries = Math.max(0, Number(this._cfg.maxRetries) || 0);
         this._deadline = GLib.get_monotonic_time()
             + Math.max(1, Number(this._cfg.loginWindowSeconds) || DEFAULTS.loginWindowSeconds) * 1000000;
         this._states = new WeakMap();
+        this._pidCache = new Map();
         this._logText = '';
         this._timer = 0;
         this._windowSignal = 0;
 
-        this._log(`== enable: apps=${this._apps.join(',')} window=${this._cfg.loginWindowSeconds}s`);
+        this._log(`== enable: apps=${this._apps.join(',')} procs=${this._procs.join(',')} window=${this._cfg.loginWindowSeconds}s`);
         this._logExisting();
 
         this._windowSignal = global.display.connect('window-created', (_display, win) => {
-            // 过了登录窗口期就彻底不管，避免几小时后新开聊天窗口也被压下去
-            if (GLib.get_monotonic_time() > this._deadline)
+            if (this._expired())
                 return;
             try {
-                this._log(`created: ${this._names(win).join('|') || '(no name)'}`);
-                this._minimize(win, 'created');
+                this._log(`created: pid=${this._pid(win)} names=${this._names(win).join('|') || '-'}`);
+                this._consider(win, 'created');
+                // 原生 Wayland 的 app_id 可能晚几帧才提交，补一次快速复查
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, NAME_RECHECK_MS, () => {
+                    try {
+                        this._consider(win, 'recheck');
+                    } catch {
+                        // 窗口可能已销毁
+                    }
+                    return GLib.SOURCE_REMOVE;
+                });
             } catch (e) {
                 this._log(`error(created): ${e.message ?? e}`);
             }
         });
 
-        this._timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => this._retry());
+        this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SCAN_INTERVAL_MS, () => this._scan());
     }
 
     disable() {
@@ -87,13 +108,14 @@ export default class QuietStartupExtension extends Extension {
             this._windowSignal = 0;
         }
         this._states = null;
+        this._pidCache = null;
         this._log('== disable');
     }
 
-    // ---- 逻辑 ----
+    // ---- 调度 ----
 
-    _retry() {
-        if (GLib.get_monotonic_time() > this._deadline) {
+    _scan() {
+        if (this._expired()) {
             this._timer = 0;
             this._log('disarm: login window elapsed');
             return GLib.SOURCE_REMOVE;
@@ -101,50 +123,44 @@ export default class QuietStartupExtension extends Extension {
         try {
             for (const actor of global.get_window_actors()) {
                 const win = actor.meta_window;
-                if (!win || !this._states.has(win))
+                if (!win || win.minimized)
                     continue;
-                this._minimize(win, 'retry');
+                this._consider(win, 'scan');
             }
         } catch (e) {
-            this._log(`error(retry): ${e.message ?? e}`);
+            this._log(`error(scan): ${e.message ?? e}`);
         }
         return GLib.SOURCE_CONTINUE;
     }
 
-    _minimize(win, reason) {
-        if (!win)
-            return;
-        if (GLib.get_monotonic_time() > this._deadline)
+    // ---- 判定与最小化 ----
+
+    _consider(win, reason) {
+        if (!win || this._expired())
             return;
         if (win.is_skip_taskbar?.() === true)
             return;
-
-        const app = this._match(win);
-        if (!app) {
-            // 不是目标应用；但如果之前认过它（重名改动之类），就别再动
+        if (win.minimized)
             return;
+
+        const handled = this._states.get(win);
+        if (handled && handled.retries > 0) {
+            // 处理过：只在应用自己把窗口弹回来、且用户没在动它时再压
+            if (handled.retries > this._maxRetries)
+                return;
+            if (win.has_focus?.() === true)
+                return;
         }
 
-        const st = this._state(win);
-
-        if (win.minimized) {
-            // 已经是最小化状态，什么都不用做
+        const hit = this._match(win);
+        if (!hit)
             return;
-        }
 
-        if (reason !== 'created') {
-            if (st.retries > this._maxRetries)
-                return;
-            if (win.has_focus?.() === true) {
-                // 有焦点 = 你刚刚手动还原并在用，不抢
-                return;
-            }
-        }
-
+        const state = this._state(win);
         try {
             win.minimize();
-            st.retries++;
-            this._log(`minimize(${reason}#${st.retries}): app=${app} names=${this._names(win).join('|')}`);
+            state.retries++;
+            this._log(`minimize(${reason}#${state.retries}): ${hit.kind}=${hit.key} pid=${this._pid(win)} names=${this._names(win).join('|') || '-'}`);
         } catch (e) {
             this._log(`error(minimize): ${e.message ?? e}`);
         }
@@ -152,19 +168,22 @@ export default class QuietStartupExtension extends Extension {
 
     _match(win) {
         const names = this._names(win);
-        // 1) 精确匹配：Wayland 的 app_id 与 X11 的 WM_CLASS 大小写已统一成小写
+        // 1) 精确匹配窗口名
         for (const token of this._apps) {
             if (names.includes(token))
-                return token;
+                return {kind: 'app', key: token};
         }
-        // 2) 包含匹配：覆盖 com.tencent.wechat / wechat-beta 这类变体；
-        //    长度 >= 4 才启用，避免 "qq" 命中 "qqmusic" 之类误伤
+        // 2) 包含匹配（仅长标识，避免 qq 命中 qqmusic）
         for (const token of this._apps) {
             if (token.length < 4)
                 continue;
             if (names.some(name => name.includes(token)))
-                return token;
+                return {kind: 'app', key: token};
         }
+        // 3) pid 兜底：读 /proc/<pid>/cmdline
+        const pidKey = this._pidMatch(win);
+        if (pidKey)
+            return {kind: 'process', key: pidKey};
         return null;
     }
 
@@ -189,21 +208,58 @@ export default class QuietStartupExtension extends Extension {
         return out;
     }
 
-    _state(win) {
-        let st = this._states.get(win);
-        if (!st) {
-            st = {retries: 0};
-            this._states.set(win, st);
+    _pid(win) {
+        try {
+            const pid = typeof win.get_pid === 'function' ? win.get_pid() : 0;
+            return typeof pid === 'number' && pid > 0 ? pid : 0;
+        } catch {
+            return 0;
         }
-        return st;
+    }
+
+    _pidMatch(win) {
+        const pid = this._pid(win);
+        if (!pid)
+            return null;
+        if (this._pidCache.has(pid))
+            return this._pidCache.get(pid);
+
+        let hit = null;
+        try {
+            const [ok, bytes] = Gio.File.new_for_path(`/proc/${pid}/cmdline`).load_contents(null);
+            if (ok && bytes && bytes.length > 0) {
+                const cmdline = new TextDecoder().decode(bytes).replace(/\0/g, ' ').toLowerCase();
+                hit = this._procs.find(token => cmdline.includes(token)) ?? null;
+            }
+        } catch {
+            // 进程可能刚好退出
+        }
+        this._pidCache.set(pid, hit);
+        return hit;
+    }
+
+    _state(win) {
+        let state = this._states.get(win);
+        if (!state) {
+            state = {retries: 0};
+            this._states.set(win, state);
+        }
+        return state;
+    }
+
+    _expired() {
+        return GLib.get_monotonic_time() > this._deadline;
     }
 
     _logExisting() {
         try {
-            const names = global.get_window_actors()
-                .map(actor => this._names(actor.meta_window).join('|'))
-                .filter(name => name !== '');
-            this._log(`existing windows: ${names.join(' , ') || '(none)'}`);
+            const lines = global.get_window_actors().map(actor => {
+                const win = actor.meta_window;
+                if (!win)
+                    return null;
+                return `pid=${this._pid(win)} names=${this._names(win).join('|') || '-'}`;
+            }).filter(line => line !== null);
+            this._log(`existing windows: ${lines.join(' , ') || '(none)'}`);
         } catch (e) {
             this._log(`error(existing): ${e.message ?? e}`);
         }
@@ -221,6 +277,8 @@ export default class QuietStartupExtension extends Extension {
             const merged = {...DEFAULTS, ...(parsed && typeof parsed === 'object' ? parsed : {})};
             if (!Array.isArray(merged.apps) || merged.apps.length === 0)
                 merged.apps = DEFAULTS.apps;
+            if (!Array.isArray(merged.processes) || merged.processes.length === 0)
+                merged.processes = DEFAULTS.processes;
             return merged;
         } catch {
             return {...DEFAULTS};
@@ -230,8 +288,8 @@ export default class QuietStartupExtension extends Extension {
     _log(line) {
         try {
             const now = new Date().toTimeString().slice(0, 8);
-            if (this._logText.length > 40000)
-                this._logText = this._logText.slice(-20000);
+            if (this._logText.length > 60000)
+                this._logText = this._logText.slice(-30000);
             this._logText += `[${now}] ${line}\n`;
             GLib.file_set_contents(LOG_PATH, this._logText);
         } catch {

@@ -50,6 +50,11 @@ if [ ! -f "$CFG_DIR/config.json" ]; then
     "wechat",
     "weixin",
     "xwechat"
+  ],
+  "processes": [
+    "/opt/qq/qq",
+    "wechat",
+    "deepseek-harness-desktop"
   ]
 }
 JSON
