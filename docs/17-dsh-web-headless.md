@@ -45,6 +45,21 @@ WantedBy=default.target
 
 改成无头服务后，`quiet-startup@local` 扩展的监控名单已经**移除 DSH**（只剩 QQ / 微信，见 [10-quiet-autostart.md](10-quiet-autostart.md)）。否则你手动开客户端时，窗口会在登录后 5 分钟窗口期内被扩展收进托盘。
 
+## 关闭桌面客户端的毛玻璃（blur）
+
+客户端的「模糊」是 `~/.local/share/dsh-tauri/.store.dat` 里 `setting.appearance.blur`，属于**桌面客户端专有设置**，Web 端不生效（Web 端没有 Tauri 宿主推送外观）。
+
+```bash
+~/.local/bin/dsh-set-appearance --blur off      # 关模糊
+~/.local/bin/dsh-set-appearance --blur on       # 开回来
+~/.local/bin/dsh-set-appearance --opacity 100   # 顺带把侧栏不透明度调到 100
+```
+
+注意两点：
+
+1. **客户端运行时会在退出时用内存里的值覆盖这个文件**，所以改了要等下次客户端启动才看得到效果；要立刻生效只能重启客户端（会中断正在用它托管的会话）。
+2. 为了让设置不被覆盖，加了 `~/.config/systemd/user/dsh-appearance.service`（oneshot，登录时执行 `dsh-set-appearance --blur off`），每次登录都会把 blur 强制关掉。想恢复「客户端里自己改外观」的话：`systemctl --user disable dsh-appearance.service`。
+
 ## 常用命令
 
 ```bash
