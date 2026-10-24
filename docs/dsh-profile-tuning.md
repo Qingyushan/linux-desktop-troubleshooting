@@ -4,7 +4,7 @@
 > 机器：Ubuntu 26.04.1 LTS / GNOME 50.1 (Wayland) / eDP-1 1920×1080@60
 > 涉及：DSH Tauri 桌面端、`better-deepseek-harness-codex` 档案、GNOME 显示缩放与应用网格
 
-这篇是 [README.md](README.md) 里 DSH 桌面端那部分的续篇：桌面端能跑起来之后，继续处理**界面比例、插件冗余、以及一个侧栏底部多出来的空按钮**。三件事的共同点是——都不是改代码能解决的，得先看清运行时到底在渲染什么。
+这篇是 [README.md](../README.md) 里 DSH 桌面端那部分的续篇：桌面端能跑起来之后，继续处理**界面比例、插件冗余、以及一个侧栏底部多出来的空按钮**。三件事的共同点是——都不是改代码能解决的，得先看清运行时到底在渲染什么。
 
 ---
 
@@ -188,7 +188,7 @@ GNOME 的 WebKit 界面没法开 devtools，但页面本身是普通网页。用
 
 重启后底部座位变成**账号菜单**（头像 + 昵称），点开是 `Settings / Feedback / Sign out`，`Settings` 打开的就是官方设置对话框。
 
-![修复后侧栏底部](assets/dsh-settings-seat.png)
+![修复后侧栏底部](../assets/dsh-settings-seat.png)
 
 ### 顺带澄清一个误判
 

@@ -1,0 +1,110 @@
+# QQ / 微信 / DSH 开机「安静」自启（窗口最小化，托盘常驻）
+
+> 返回索引：[README](../README.md) ｜ 原始位置：§12.3 ｜ 相关脚本：`../scripts/install-quiet-startup.sh`、`../gnome-extension/quiet-startup@local/`
+
+
+目标：登录后三个应用自己起来，但**主窗口不弹出来抢焦点**，托盘里能看到图标，点一下就回来。
+
+**难点**：QQ、微信 4.x、DSH 桌面端现在都是原生 Wayland 窗口；Wayland 没有"让外部进程最小化别人窗口"的接口（`xdotool` / `wmctrl` 只对 XWayland 窗口有效），所以没法靠"启动后再把窗口藏起来"的脚本。唯一能做这件事的是**跑在 GNOME Shell 进程里的扩展**。
+
+**做法**：一个本地小扩展 `quiet-startup@local` + 三个 autostart 入口。
+
+- 登录后 300 秒内，**每 500ms 扫描全部窗口**，命中名单就 `minimize()`；
+- 命中判定有两条路（缺一不可，原因见下面的复盘）：
+  1. 窗口名：`wm_class` / `app_id`，精确比对 + 长标识（≥4 字符）包含匹配；
+  2. 进程兜底：`win.get_pid()` → 读 `/proc/<pid>/cmdline`，命中 `/opt/qq/qq`、`wechat`、`deepseek-harness-desktop`；
+- 首次命中即使窗口带着焦点也压下去（登录时 autostart 窗口通常自带焦点）；
+- **应用自己把窗口顶回来就继续压**：只要距上次压制还不到 `focusGraceSeconds`（默认 60 秒），即使窗口有焦点也照样压——QQ 自动登录完成后会自己连顶 3~4 次，不这样处理就会留在屏幕上；超过宽限期又带焦点，才当成你手动还原、让位；
+- 每个窗口最多压 `maxRetries`（默认 8）次，避免和应用无限对打；
+- 300 秒后彻底放手，之后手动开这些应用、开新的聊天窗口都不受影响。
+
+安装（幂等，可重复执行）：
+
+```bash
+./scripts/install-quiet-startup.sh
+```
+
+| 路径 | 作用 |
+| --- | --- |
+| `~/.local/share/gnome-shell/extensions/quiet-startup@local/` | 扩展本体（源码在仓库 `gnome-extension/`） |
+| `~/.config/quiet-startup/config.json` | 窗口期秒数、重试次数、窗口名列表 `apps`、进程兜底列表 `processes` |
+| `~/.config/autostart/{wechat,qq,deepseek-harness-desktop}.desktop` | 自启入口，延迟 8 / 12 / 5 秒 |
+| dconf `org.gnome.shell enabled-extensions` | 启用扩展（保留已有的其它扩展） |
+
+**必须注销重登一次**：GNOME Shell 只在自己的启动流程里扫描扩展目录，运行期新加的扩展不会被发现（此时 `gnome-extensions enable` 会报"扩展不存在"，不是配置错了）。
+
+重登后验证：
+
+```bash
+gnome-extensions info quiet-startup@local    # State 应为 ENABLED
+cat /tmp/quiet-startup.log
+```
+
+正常的日志长这样（`app=` 是窗口名命中，`process=` 是 pid 兜底命中，两种都算成功）：
+
+```
+== enable: apps=deepseek-harness-desktop,qq,wechat,... procs=/opt/qq/qq,wechat,... window=150s
+existing windows: pid=0 names=-
+created: pid=4094 names=qq
+minimize(created#1): app=qq pid=4094 names=qq
+created: pid=4156 names=-
+minimize(scan#1): process=wechat pid=4156 names=wechat
+```
+
+> 想验证"现在就行"而不重登，可以看 `existing windows:` 那一行：它会把当前所有窗口的 pid 和名字打出来。
+
+托盘图标：QQ / DSH 走 SNI，由 Ubuntu 自带的 AppIndicator 扩展显示；微信 4.x 内置 SNI 支持，登录后出现在托盘（未登录时只有登录窗口，托盘还没建）。
+
+名单不对（某个应用还是弹窗）时：看日志 `created:` 后面的名字，加进 `config.json` 的 `apps` 数组，再
+
+```bash
+gnome-extensions disable quiet-startup@local && gnome-extensions enable quiet-startup@local
+```
+
+（改配置不用重登，改 `extension.js` 代码才需要重登。）
+
+取消：
+
+```bash
+gnome-extensions disable quiet-startup@local          # 只停"最小化"，自启保留
+sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
+    ~/.config/autostart/{wechat,qq,deepseek-harness-desktop}.desktop   # 连自启一起停
+```
+
+**复盘：第一版为什么没生效**
+
+第一版只在 `window-created` 时按窗口名匹配一次，结果重启后 QQ 被最小化了、微信和 DSH 没有。日志说明了原因：
+
+```
+[12:01:59] created: qq
+[12:01:59] minimize(created#1): app=qq names=qq        <- XWayland，创建时就有 WM_CLASS
+[12:02:00] created: (no name)                          <- 原生 Wayland，创建时 app_id 还没提交
+[12:02:00] created: (no name)
+```
+
+同一批窗口在几十毫秒后（重新 enable 时打印的 `existing windows:`）名字就变成了 `qq` / `wechat` / `deepseek-harness-desktop`。也就是说 **`app_id` 是在 `window-created` 之后才提交的**，一次性匹配必然漏掉原生 Wayland 窗口。所以改成"持续扫描 + 进程 pid 兜底"：即使 `app_id` 永远为空的窗口，也能靠 `/proc/<pid>/cmdline` 认出来。
+
+**复盘二：QQ 自动登录后窗口又回来了**
+
+第二版生效后（重启验证），QQ 的登录框确实被压下去了，但自动登录完成后主面板又冒出来。日志显示这是应用自己在抢，不是扩展没匹配上：
+
+```
+[12:54:19] minimize(created#1): app=qq pid=4236
+[12:54:24] minimize(created#1): app=qq pid=4236     ← QQ 自己又顶了一个窗口
+[12:54:47] minimize(scan#2):  app=qq pid=4236       ← 28 秒后被扫到又压回去
+[12:55:40] minimize(scan#3):  app=qq pid=4236       ← 又顶，又压
+[12:56:47] disarm: login window elapsed             ← 之后 QQ 再顶就没人管了
+```
+
+两个问题：① `maxRetries=3` 太少，QQ 顶的次数比这多；② 原来的「有焦点就让位」规则把"应用自己顶上来"误判成"用户手动还原"。改法就是上面的宽限期 + 提高重试次数 + 窗口期延长到 300 秒。
+
+**踩过的坑**：
+
+- 旧 AppImage 时代留下的 `~/.config/autostart/Deepseek Harness Desktop.desktop` 是重复入口，会让 DSH 被拉起两次（第二次激活还会把刚最小化的窗口顶回来）；已挪到 `~/.config/autostart-disabled/`。
+- 别为了"藏窗口"去开 `force_xwayland=true` 或 `GDK_BACKEND=x11`：那等于把 DSH 整个会话换回 XWayland，可能把 [05-dsh-render-freeze.md](05-dsh-render-freeze.md) 里的"只有 resize 才刷新"重新引回来。
+- 别用 `xdotool windowunmap` 硬藏窗口：应用会以为自己仍然可见，之后的焦点/输入行为会变得很怪；`minimize()` 才是正常路径。
+- 微信/QQ 如果没有自动登录，第一次出现的**登录窗口也会被最小化**：点 Dock 图标或托盘菜单里的"显示主面板"即可。
+- 自启入口里带 `X-GNOME-Autostart-Delay` 是为了错开登录瞬间的 IO；DSH 自己设置里的"开机自启"如果被重开，可能把 `Exec` 改回不带延迟的原始命令——窗口仍然会被扩展最小化，不影响结果。
+- 改完 `extension.js` **必须重新登录**才生效：GNOME 45+ 用 ESM 加载扩展，`gnome-extensions disable/enable` 会复用模块缓存，改了代码也不会重新读（实测日志里还是旧格式）。改 `config.json` 则只需 disable/enable。
+- autostart 应用的窗口在登录阶段本来就会带焦点，「有焦点就让位」不能当通用规则用；正确做法是"刚压过就无视焦点、隔久了才让位"（`focusGraceSeconds`）。
+- 别用"窗口有焦点就不压"当作首次命中的条件：autostart 的窗口本来就会拿焦点，加了这条等于一个都不压。正确做法是首次命中照压、只在"用户还原后"让位。
