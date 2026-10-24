@@ -40,6 +40,7 @@
 | 28 | **触摸板：点击、滚动、误触、手势** | [28-touchpad.md](docs/28-touchpad.md) | — |
 | 29 | **DSH 日常改用 Web 端：客户端托管 3080 + 网页快捷方式（开机不弹客户端）** | [29-dsh-web-headless.md](docs/29-dsh-web-headless.md) | —（客户端托管 + 两个启动器） |
 | 30 | **NVIDIA 硬解：浏览器为什么用不上，mpv 怎么用 NVDEC** | [30-nvidia-video-decode.md](docs/30-nvidia-video-decode.md) | —（`~/.config/mpv/mpv.conf`） |
+| 31 | **DSH 菜单毛玻璃：半透明根因与重放脚本（含窗口不透明度持久化）** | [31-dsh-menu-frost.md](docs/31-dsh-menu-frost.md) | [dsh-menu-frost.sh](scripts/dsh-menu-frost.sh) |
 | — | DSH 档案调优（缩放、插件去重、侧栏空按钮） | [dsh-profile-tuning.md](docs/dsh-profile-tuning.md) | [dsh/profile-config/](dsh/profile-config/) |
 | — | **经验总结（方法、教训、我犯过的错）** | [lessons.md](docs/lessons.md) | — |
 
