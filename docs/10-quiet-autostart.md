@@ -164,10 +164,8 @@ sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
 
 ## 现状（2026-10-24 晚调整）
 
-DSH 桌面客户端**已不再开机自启**（改为 systemd 无头服务跑 Web 端，见 [17-dsh-web-headless.md](17-dsh-web-headless.md)），所以：
+DSH 桌面客户端**是 3080 的宿主**（systemd 无头服务已停用，见 [17-dsh-web-headless.md](17-dsh-web-headless.md)），所以名单里**保留** DSH：
 
-- 扩展的监控名单里**移除了** `deepseek-harness-desktop` / `deepseek-harness` / `dsh-tauri`；
-- `install-quiet-startup.sh` 也不再生成 DSH 的 autostart 入口；
-- 现在是 **QQ + 微信**两个应用"安静自启"，DSH 走无头服务 + 网页快捷方式。
-
-为什么必须移除：如果还留在名单里，你在登录后 5 分钟内**手动**用 `dsh-client` 打开客户端，窗口会被扩展立刻最小化——那正是你不想要的。
+- `apps` 与 `processes` 都含 `deepseek-harness-desktop`，登录后它的窗口会被最小化到托盘；
+- 新版扩展的闸门能区分“自启的 DSH”和“你手动开的”：进程比 shell 晚启动 >120 秒就整个 pid 不管，窗口只在 enable 后 60 秒内出现才压，你点中过就永久让位；
+- 现在安静自启的是 **QQ + 微信 + DSH 客户端**三家。

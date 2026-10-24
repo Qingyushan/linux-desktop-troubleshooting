@@ -97,3 +97,29 @@ pgrep -af deepseek-harness-desktop || echo "客户端未运行（符合预期）
 - 桌面客户端设置里的「开机自启」如果被重新打开，会重新生成 `~/.config/autostart/deepseek-harness-desktop.desktop`，届时会和服务抢端口——保持它关闭。
 - 无头服务跑的是同一个 profile，插件、插件配置、会话都在 `~/.dsh` 里，和客户端完全一致；只是 `dsh-tauri*` 这些桌面专用插件在无头模式下不起作用（不影响 Web UI）。
 - 如果服务起不来：`dsh-web` 会自动回退到桌面客户端；也可以手动 `~/.local/bin/dsh-client`。
+
+## 2026-10-24 晚改版：改为「客户端托管、Web 端共用同一 3080」
+
+起初做成 systemd 无头服务 + 桌面客户端按需启动，但**两者会抢 3080**：开客户端就得先停服务（会断开网页端会话）。用户要求“共用一个端口、不要 stop”，于是查了上游源码。
+
+### 源码结论：客户端不能复用别人的 harness
+
+- `service/workflow/launch.rs` 的 `start()` 只在 `has_owned_process()`（自己起的子进程还活着）时才跳过启动；
+- `prepare_port()` 在非 Windows 分支：端口被**未知进程**占用时返回 `Ok(false)`，交给 `find_available_port()` 逐级 +1 → 客户端会在 **3081** 另起第二个 harness，和 systemd 服务共用同一个 `$DSH_HOME`（两个核心同时写存储，还有 `reset_active_profile_root` 会改 `cordis.yml`，很危险）。
+
+所以“客户端附着到已有核心”在本版本不可行。
+
+### 新方案（当前生效）
+
+- **桌面客户端是 3080 的唯一宿主**：恢复开机自启（`auto_start=true` + `~/.config/autostart/deepseek-harness-desktop.desktop`），登录后由 `quiet-startup` 扩展把它最小化到托盘；
+- **systemd 无头服务停用**（`systemctl --user disable dsh-harness.service`，单元文件保留备用）；
+- `dsh-client` 只负责启动客户端，**不再 stop 任何服务**；
+- `dsh-web`：3080 已通就直接开 Firefox；没通就先拉起桌面客户端，等最多 90 秒；
+- `quiet-startup` 名单里重新加入 DSH（否则登录会弹客户端窗口）。
+
+### 代价
+
+- 客户端进程常驻（WebKit 子进程约 200–500 MB 内存），但窗口在托盘里，不参与日常交互；
+- 关掉客户端＝断掉 Web 端后端，这是“单一宿主”的必然结果。
+
+> 上游如果要支持“附着外部核心”，得让 `prepare_port` 在端口被占时先 `is_dsh_running(port)` 探测并复用；可以做为 feature request 提给 `dsh-tauri/deepseek-harness-desktop`。
