@@ -49,6 +49,9 @@
 | Variety 壁纸轮换 | [12](12-variety-wallpaper.md) | 避开 GNOME 自己的壁纸缓存 |
 | GRUB 菜单等待时间（双系统） | [13](13-daily-tips.md) | `30_os-prober` 会兜底改写 timeout，只改 `/etc/default/grub` 不一定生效 |
 | 日常命令与小习惯 | [13](13-daily-tips.md)、[14](14-appendix-commands.md) | 检查命令、日志位置 |
+| 没声音 / 设备切换（PipeWire） | [19](19-audio-pipewire.md) | `wpctl status` 三步定位；HDMI 无设备常属正常 |
+| Wayland 屏幕共享 / 录屏黑屏 | [20](20-wayland-screenshare.md) | portal + PipeWire 链路；X11 工具在 Wayland 抓不到 |
+| 蓝牙连不上 / 连上没声音 | [21](21-bluetooth.md) | A2DP vs HFP；rfkill 与 Powered 是两个开关 |
 
 ### F. 方法与索引
 
@@ -62,13 +65,10 @@
 
 ## 2. 空白区（还没写，但迟早会踩）
 
-按「发生概率 × 排错成本」排序，前五个建议优先补：
+按「发生概率 × 排错成本」排序。**音频、Wayland 屏幕共享、蓝牙已补齐（19–21）**，下面是剩余缺口：
 
 | 优先级 | 领域 | 典型症状 | 为什么值得写 |
 |---|---|---|---|
-| ★★★ | **音频** | 突然没声音、输出设备选错、HDMI/蓝牙切换后静音 | 发生频率最高；PipeWire 的 `pactl`/`wpctl` 与 GNOME 声音面板关系容易绕晕 |
-| ★★★ | **屏幕共享 / 录屏（Wayland）** | 会议软件共享黑屏、OBS 抓不到窗口 | Wayland 下走 portal + PipeWire，和 X11 时代完全不同，网上老教程全是错的 |
-| ★★★ | **蓝牙** | 耳机连上没声音、A2DP/HFP 来回跳、断连 | 与音频强相关，常被误判成"声卡坏了" |
 | ★★☆ | **系统更新后的内核/显卡** | 更新后黑屏、掉到 llvmpipe、nvidia 模块没编 | 低频但**致命**，一旦发生机器进不了图形界面 |
 | ★★☆ | **电源 / 续航 / 合盖休眠** | 合盖不睡、睡死、耗电快 | 笔记本常见；涉及 `systemd-logind` 与内核参数 |
 | ★★☆ | **Wi-Fi / DNS** | 连不上、能 ping IP 不能解析域名 | 排查路径固定（`nmcli` → `resolvectl` → 路由），适合写成清单 |
