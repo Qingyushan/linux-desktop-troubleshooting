@@ -137,3 +137,130 @@ gsettings get org.gnome.desktop.interface font-hinting          # 常见：sligh
 2. **CJK 是一个大字体文件（.ttc）含多语言子族**，装一个包不等于用对子族，要靠 fontconfig 明确指定 `SC`。
 3. **用户级规则优先于系统级**，升级不会丢。
 4. **缩放问题别用字体的办法解决**：先确认缩放是不是 1.25，再谈字体。
+
+---
+
+## 5. 坑：`strong prepend` 会劫持拉丁字族（Arial → NotoSansCJK.ttc）
+
+### 症状
+
+为了让中文优先用 SC 字形，写下这条规则：
+
+```xml
+<match target="pattern">
+  <test name="lang" compare="contains"><string>zh</string></test>
+  <edit name="family" mode="prepend" binding="strong">
+    <string>Noto Sans CJK SC</string>
+  </edit>
+</match>
+```
+
+之后**任何**字体请求都会落到 `NotoSansCJK-Regular.ttc`：
+
+```bash
+$ fc-match Arial
+NotoSansCJK-Regular.ttc: "Noto Sans CJK SC" "Regular"
+$ fc-match Segoe UI
+NotoSansCJK-Regular.ttc: "Noto Sans CJK SC" "Regular"
+```
+
+正常应该是 `LiberationSans-Regular.ttf`（Arial 的度量别名）。
+
+### 根因
+
+- 规则里**只有 `lang` 测试，没有 `family` 测试**；
+- `binding="strong"` 表示这个字族必须保留在最前面，不会被后续匹配去掉；
+- 而 `LANG=zh_CN.UTF-8` 时，fontconfig 会给几乎所有应用的字体请求带上 `lang=zh`。
+
+于是拉丁字族请求也被顶上了 CJK 字体。GNOME 系应用（Pango）能正常渲染 Noto CJK 的拉丁字形，所以症状不明显；但**老渲染器**（见下一节的 Steam）处理 `.ttc` 集合时有坑。
+
+### 怎么判断（A/B 对照，别靠猜）
+
+```bash
+# 1) 现在会不会被劫持
+fc-match Arial            # 期望 LiberationSans-Regular.ttf
+fc-match 'sans-serif:lang=en'   # 期望 Noto Sans / DejaVu，而不是 CJK ttc
+
+# 2) 把用户配置移开再测一次，确认是不是它
+mv ~/.config/fontconfig/fonts.conf /tmp/fonts.conf.off
+fc-cache -f >/dev/null
+fc-match Arial
+mv /tmp/fonts.conf.off ~/.config/fontconfig/fonts.conf
+```
+
+### 修法：给规则加字族限定
+
+```xml
+<!-- 只对「通用无衬线」生效 -->
+<match target="pattern">
+  <test name="lang" compare="contains"><string>zh</string></test>
+  <test name="family" compare="eq"><string>sans-serif</string></test>
+  <edit name="family" mode="prepend" binding="strong">
+    <string>Noto Sans CJK SC</string>
+  </edit>
+</match>
+
+<!-- 显式请求 CJK 字族时也优先 SC -->
+<match target="pattern">
+  <test name="lang" compare="contains"><string>zh</string></test>
+  <test name="family" compare="contains"><string>CJK</string></test>
+  <edit name="family" mode="prepend" binding="strong">
+    <string>Noto Sans CJK SC</string>
+  </edit>
+</match>
+```
+
+验证：
+
+```bash
+fc-match Arial                  # → LiberationSans-Regular.ttf  ✅
+fc-match 'sans-serif:lang=zh-cn' # → Noto Sans CJK SC（中文需求保留）✅
+```
+
+---
+
+## 6. Steam 更新窗口中文变 ◆ 方块（应用内正常）
+
+### 症状
+
+启动 Steam 更新时弹出的小窗口（标题 `Steam`、一个进度条）：
+
+```
+◆◆◆◆ Steam...
+◆◆◆◆◆◆◆◆◆◆...
+      [◆◆]
+```
+
+`Steam...` 能正常显示，但中文全是菱形；**进入 Steam 应用后界面完全正常**。
+
+### 定位过程
+
+1. 更新窗口不是 GTK/zenity：`~/.steam/debian-installation/ubuntu12_32/steam`（bootstrap 二进制）里同时有
+   `Updating Steam...` 和本地化 token `#SteamBootstrapper_UpdatingSteam`，
+   说明**它自绘并自己本地化**，中文 locale 下渲染“正在更新 Steam...”；
+2. 菱形数量对得上：「正在更新」4 个字 → 4 个 ◆，「Steam...」是 ASCII 所以正常；
+3. 系统字体没问题：用 Pango + `Ubuntu Sans 11` 渲染同一句中文完全正常；
+4. 应用内界面用的是 Steam 自带的 `clientui/fonts/GoNotoKurrent-Regular.ttf`（CEF 加载），所以不受影响。
+
+结论：**Steam 的 bootstrap 自绘渲染器没有 CJK 字形**，与 fontconfig、系统字体无关。
+（先试过给 Steam 加 `FONTCONFIG_FILE` 优先 TTF 字体——无效，那针对的是 `.ttc` 处理问题，不是缺字形。）
+
+### 解法：让 bootstrap 走英文
+
+```bash
+cp /usr/share/applications/steam.desktop ~/.local/share/applications/steam.desktop  # 或从上游复制
+# 把 Exec 改成：
+# Exec=env LANG=C.UTF-8 LANGUAGE=en /usr/games/steam %U
+sed -i 's|^Exec=/usr/games/steam|Exec=env LANG=C.UTF-8 LANGUAGE=en /usr/games/steam|' \
+  ~/.local/share/applications/steam.desktop
+update-desktop-database ~/.local/share/applications
+```
+
+要点：
+
+- **只影响对话框文案**，Steam 界面语言不变——界面语言是按账号存在
+  `~/.steam/steam/userdata/<id>/config/localconfig.vdf`，不读 `LANG`；
+- 验证：下次 Steam 客户端更新时，那个窗口应该变成英文 `Updating Steam...`；
+- 回滚：删掉用户级 `steam.desktop`，恢复 deb 自带的同名文件或软链接即可。
+
+这是 Valve 侧的问题（bootstrap 不支持 CJK 渲染），本地只能绕过。
