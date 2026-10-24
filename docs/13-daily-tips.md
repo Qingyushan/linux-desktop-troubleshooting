@@ -18,6 +18,56 @@
 
 ---
 
+## 双系统：把 Windows 放菜单第一位并设为默认
+
+GRUB 的菜单顺序由 `/etc/grub.d/` 里脚本的**编号顺序**决定：Ubuntu 由 `10_linux` 生成，Windows 由 `30_os-prober` 追加在最末尾。想让 Windows 在前，不是改 `GRUB_DEFAULT` 就行（那只是改默认选中项，顺序不变），得让 Windows 条目先被生成。
+
+做法：**自己写一个 `05_windows`**（编号小于 10），并关掉 os-prober 防止再追加一份。
+
+```bash
+sudo tee /etc/grub.d/05_windows >/dev/null <<'EOF'
+#!/bin/sh
+exec tail -n +3 "$0"
+menuentry 'Windows Boot Manager' --class windows --class os $menuentry_id_option 'osprober-efi-ED66-B0AE' {
+	insmod part_gpt
+	insmod fat
+	search --no-floppy --fs-uuid --set=root ED66-B0AE
+	chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+}
+EOF
+sudo chmod 755 /etc/grub.d/05_windows
+
+# 关掉 os-prober，否则 30_os-prober 还会把 Windows 追加到最后（菜单里出现两份）
+sudo sed -i 's/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=true/' /etc/default/grub
+grep -q '^GRUB_DISABLE_OS_PROBER=' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=true' | sudo tee -a /etc/default/grub
+
+sudo update-grub
+```
+
+验证（`grub.cfg` 是 root 600，必须 sudo 读）：
+
+```bash
+sudo grep -nE "^menuentry|^submenu" /boot/grub/grub.cfg
+```
+
+本机结果：
+
+```
+141:menuentry 'Windows Boot Manager' … $menuentry_id_option 'osprober-efi-ED66-B0AE'
+170:menuentry 'Ubuntu' …
+182:submenu 'Advanced options for Ubuntu' …
+```
+
+`GRUB_DEFAULT=0` → 默认项就是第一项（Windows）；`GRUB_TIMEOUT=3` 仍是 3 秒。
+
+要点：
+
+- **`menuentry_id_option 'osprober-efi-ED66-B0AE'` 要和你机器 EFI 分区的 UUID 一致**（`lsblk -f` 看 `/boot/efi` 的 FAT32 分区 UUID）。写错会启动失败——所以最稳的是先从现有 `grub.cfg` 里把那段 Windows 条目原样抄过来。
+- `exec tail -n +3 "$0"` 是 `/etc/grub.d` 自定义脚本的标准写法：第 3 行往后的内容会被当作 GRUB 配置输出。
+- 关掉 os-prober 的代价：以后**新装的其他系统不会再自动出现在菜单里**，要手动加条目。
+- 回滚：`rm -f /etc/grub.d/05_windows && cp -a /etc/default/grub.bak-<时间> /etc/default/grub && sudo update-grub`。
+- 不改 `GRUB_DEFAULT` 的值（保持 0）即可，因为 Windows 已经是第一项。
+
 ## 启动项：GRUB 菜单等待 3 秒（双系统）
 
 **先纠正一个容易看错的地方**：只看 `/etc/default/grub` 会得出错误结论。
