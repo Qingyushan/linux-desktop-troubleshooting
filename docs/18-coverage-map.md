@@ -31,6 +31,8 @@
 | 停靠栏/应用菜单图标空白 | [06](06-dsh-dock-icon-blank.md) | GNOME Shell 按图标名缓存，换新名字 + 用户级覆盖 |
 | 功能体检清单 | [08](08-dsh-feature-check.md) | 逐项验证（托盘、宠物、`dsh://`、inotify…） |
 | 缩放、插件去重、侧栏空按钮、dsh-ui 卡片 | [dsh-profile-tuning](dsh-profile-tuning.md) | 125% 缩放、GNOME 网格扩展失败的记录、genui 渲染器依赖 |
+| 菜单/浮层半透明、毛玻璃与可读性 | [31](31-dsh-menu-frost.md) | 窗口不透明度与主题 token 是两层；覆盖材质层必须 `!important`，升级后重放脚本 |
+| 日常改用 Web 端、客户端托管 3080 | [29](29-dsh-web-headless.md) | 桌面客户端是唯一宿主，网页端共用同一端口 |
 
 ### D. 磁盘与文件系统
 
@@ -48,6 +50,7 @@
 | Rime 雾凇拼音 | [11](11-rime-ime.md) | 词库、候选数、中英切换 |
 | Variety 壁纸轮换 | [12](12-variety-wallpaper.md) | 避开 GNOME 自己的壁纸缓存 |
 | GRUB 菜单等待时间（双系统） | [13](13-daily-tips.md) | `30_os-prober` 会兜底改写 timeout，只改 `/etc/default/grub` 不一定生效 |
+| 浏览器视频硬解（NVIDIA / Intel 都不行） | [30](30-nvidia-video-decode.md) | 浏览器 VA-API 在 NVIDIA 上三重死路；真正可用是 mpv `hwdec=nvdec` |
 | 日常命令与小习惯 | [13](13-daily-tips.md)、[14](14-appendix-commands.md) | 检查命令、日志位置 |
 | 没声音 / 设备切换（PipeWire） | [19](19-audio-pipewire.md) | `wpctl status` 三步定位；HDMI 无设备常属正常 |
 | Wayland 屏幕共享 / 录屏黑屏 | [20](20-wayland-screenshare.md) | portal + PipeWire 链路；X11 工具在 Wayland 抓不到 |
