@@ -7,7 +7,7 @@
 #       材质层的 background-color 与 backdrop-filter，并用 !important 压过。
 #
 # 用法：
-#   scripts/dsh-menu-frost.sh              # 默认 0.65 / 28px
+#   scripts/dsh-menu-frost.sh              # 默认 0.82 / 36px（浮层 +0.02 实、+4px 模糊）
 #   scripts/dsh-menu-frost.sh 0.65 32      # 更透、模糊更强
 #   scripts/dsh-menu-frost.sh --remove     # 移除覆盖，恢复主题原样
 #
@@ -15,11 +15,11 @@
 # 升级 DSH 后重跑一次即可（构建产物 index-*.css 会被重新生成）。
 set -euo pipefail
 
-ALPHA="${1:-0.65}"
-BLUR="${2:-28}"
+ALPHA="${1:-0.82}"
+BLUR="${2:-36}"
 MODE="apply"
 case "${1:-}" in
-    --remove|-r) MODE="remove"; ALPHA="0.65"; BLUR="28" ;;
+    --remove|-r) MODE="remove"; ALPHA="0.82"; BLUR="36" ;;
 esac
 
 DRI="$HOME/.local/share/dsh-tauri/dependencies"
@@ -47,6 +47,9 @@ if mode == "remove":
     print("removed")
     raise SystemExit
 
+panel_alpha = f"{max(0.60, float(alpha) - 0.02):.2f}"
+panel_blur = str(int(blur) + 4)
+
 m = re.search(r"\.(_material_[A-Za-z0-9]+_[A-Za-z0-9]+)", text)
 if not m:
     print("no-material-class")
@@ -55,10 +58,9 @@ mat = "." + m.group(1)
 
 block = f"""
 
-/* ===== DSH 定制：菜单毛玻璃（重放：scripts/dsh-menu-frost.sh）=====
-   透明 {alpha}（越大越实）、模糊 {blur}px。改了数字后重跑脚本。
-   同时把 --dsw-specific-menu 提到不透明：卡片/浮层用它做底色，
-   保留 94% 半透明会在 WebKit 里透出下层文字。 */
+/* ===== DSH 定制：菜单/浮层毛玻璃（重放：scripts/dsh-menu-frost.sh）=====
+   菜单透明 {alpha}、模糊 {blur}px；浮层/卡片略实一些（{panel_alpha} / {panel_blur}px）。
+   改了数字后重跑脚本。 */
 {mat}{{
   background-color: rgba(248,249,250,{alpha}) !important;
   backdrop-filter: blur({blur}px) saturate(150%) !important;
@@ -67,8 +69,14 @@ block = f"""
 body[data-ds-dark-theme] {mat}{{
   background-color: rgba(67,69,74,{alpha}) !important;
 }}
-body{{--dsw-specific-menu:#f8f9fa !important}}
-body[data-ds-dark-theme]{{--dsw-specific-menu:#303136 !important}}
+[class*="_panel"]{{
+  background-color: rgba(248,249,250,{panel_alpha}) !important;
+  backdrop-filter: blur({panel_blur}px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur({panel_blur}px) saturate(150%) !important;
+}}
+body[data-ds-dark-theme] [class*="_panel"]{{
+  background-color: rgba(67,69,74,{panel_alpha}) !important;
+}}
 """
 p.write_text(text + block)
 print("applied", mat)

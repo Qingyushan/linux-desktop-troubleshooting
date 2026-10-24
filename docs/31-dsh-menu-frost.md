@@ -97,13 +97,13 @@ body[data-ds-dark-theme] ._material_ri079_21{
 }
 ```
 
-为什么是 65% + 28px：原版 45% + 40px 在模糊生效时好看，一旦模糊失效就退化成全透；65% 保证即便 `backdrop-filter` 不被支持（WebKitGTK 版本差异）也不会透到叠字，28px 让磨砂更明显。想要更实可 `0.80 24`，更玻璃可 `0.50 32`。
+为什么是 82% + 36px（浮层 80% + 40px）：原版 45% + 40px 在模糊生效时好看，一旦模糊失效就退化成全透；82% 保证即便 `backdrop-filter` 不被支持（WebKitGTK 版本差异）也不会透到叠字，28px 让磨砂更明显。想要更实可 `0.80 24`，更玻璃可 `0.50 32`。
 
 ### 3. 使用与调参
 
 ```bash
-scripts/dsh-menu-frost.sh            # 默认 0.65 / 28px
-scripts/dsh-menu-frost.sh 0.50 32    # 更透、模糊更强
+scripts/dsh-menu-frost.sh            # 默认 0.82 / 36px（浮层 0.80 / 40px）
+scripts/dsh-menu-frost.sh 0.60 44    # 更透、模糊更强
 scripts/dsh-menu-frost.sh --remove   # 恢复主题原样
 ```
 
@@ -133,8 +133,8 @@ body[data-ds-dark-theme]{--dsw-specific-menu:#303136 !important}  /* 深色 */
 无头 Chrome 里 `Emulation.setEmulatedMedia` 切 `prefers-color-scheme`，再点开菜单读计算样式，期望：
 
 ```
-LIGHT: bg rgba(248, 249, 250, 0.65)  bf blur(28px) saturate(1.5)
-DARK : bg rgba(67, 69, 74, 0.65)     bf blur(28px) saturate(1.5)
+LIGHT: menu rgba(248,249,250,0.82) blur(36px) | panel rgba(248,249,250,0.80) blur(40px)
+DARK : menu rgba(67,69,74,0.82)     blur(36px) | panel rgba(67,69,74,0.80)     blur(40px)
 ```
 
 ## 回滚
