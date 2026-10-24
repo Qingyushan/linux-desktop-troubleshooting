@@ -97,12 +97,12 @@ body[data-ds-dark-theme] ._material_ri079_21{
 }
 ```
 
-为什么是 82% + 36px（浮层 80% + 40px）：原版 45% + 40px 在模糊生效时好看，一旦模糊失效就退化成全透；82% 保证即便 `backdrop-filter` 不被支持（WebKitGTK 版本差异）也不会透到叠字，28px 让磨砂更明显。想要更实可 `0.80 24`，更玻璃可 `0.50 32`。
+为什么是 82% + 36px：原版 45% + 40px 在模糊生效时好看，一旦模糊失效就退化成全透；82% 保证即便 `backdrop-filter` 不被支持（WebKitGTK 版本差异）也不会透到叠字，28px 让磨砂更明显。想要更实可 `0.80 24`，更玻璃可 `0.50 32`。
 
 ### 3. 使用与调参
 
 ```bash
-scripts/dsh-menu-frost.sh            # 默认 0.82 / 36px（浮层 0.80 / 40px）
+scripts/dsh-menu-frost.sh            # 默认 0.82 / 36px
 scripts/dsh-menu-frost.sh 0.60 44    # 更透、模糊更强
 scripts/dsh-menu-frost.sh --remove   # 恢复主题原样
 ```
@@ -116,6 +116,10 @@ scripts/dsh-menu-frost.sh --remove   # 恢复主题原样
 生效：浏览器 `Ctrl+Shift+R` 硬刷新；客户端 `Ctrl+R` 或退出重开（客户端是 3080 宿主，会断开几秒）。
 
 ### 3.1 卡片/子智能体：另一个 token
+
+> **踩过的坑**：曾用 `[class*="_panel"]` 通配给“所有浮层/卡片”加毛玻璃，
+> 结果命中了主内容面板（`P3OORG_panel`，675×857），把页面右侧涂成一大块实色、
+> 布局看起来像坏了。**不要用这种宽泛属性选择器**，要落到具体组件类名或用 token 控制。
 
 菜单之外，聊天流里的「旁问专家 / 子智能体」卡片用的是 `--dsw-specific-menu`
 （主题里 `#303136f0` = 94%，且没有 backdrop-filter）。它不在 `.material` 覆盖范围内，

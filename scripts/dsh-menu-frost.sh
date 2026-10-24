@@ -40,15 +40,13 @@ path, alpha, blur, mode = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 p = pathlib.Path(path)
 text = p.read_text()
 # 去掉上一次追加的块（到文件末尾）
-text = re.sub(r"\n?/\* ===== DSH 定制：菜单毛玻璃.*\Z", "", text, flags=re.S)
+text = re.sub(r"\n?/\* ===== DSH 定制：.*\Z", "", text, flags=re.S)
 
 if mode == "remove":
     p.write_text(text)
     print("removed")
     raise SystemExit
 
-panel_alpha = f"{max(0.60, float(alpha) - 0.02):.2f}"
-panel_blur = str(int(blur) + 4)
 
 m = re.search(r"\.(_material_[A-Za-z0-9]+_[A-Za-z0-9]+)", text)
 if not m:
@@ -59,7 +57,6 @@ mat = "." + m.group(1)
 block = f"""
 
 /* ===== DSH 定制：菜单/浮层毛玻璃（重放：scripts/dsh-menu-frost.sh）=====
-   菜单透明 {alpha}、模糊 {blur}px；浮层/卡片略实一些（{panel_alpha} / {panel_blur}px）。
    改了数字后重跑脚本。 */
 {mat}{{
   background-color: rgba(248,249,250,{alpha}) !important;
@@ -68,14 +65,6 @@ block = f"""
 }}
 body[data-ds-dark-theme] {mat}{{
   background-color: rgba(67,69,74,{alpha}) !important;
-}}
-[class*="_panel"]{{
-  background-color: rgba(248,249,250,{panel_alpha}) !important;
-  backdrop-filter: blur({panel_blur}px) saturate(150%) !important;
-  -webkit-backdrop-filter: blur({panel_blur}px) saturate(150%) !important;
-}}
-body[data-ds-dark-theme] [class*="_panel"]{{
-  background-color: rgba(67,69,74,{panel_alpha}) !important;
 }}
 """
 p.write_text(text + block)
