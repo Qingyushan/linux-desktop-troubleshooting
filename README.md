@@ -26,6 +26,7 @@
 | 14 | 附录：常用检查命令 | [14-appendix-commands.md](docs/14-appendix-commands.md) | — |
 | 15 | 尚未解决 / 后续 | [15-unresolved.md](docs/15-unresolved.md) | — |
 | 16 | **Windows 分区（176 GB 卷）在「文件」里挂载失败** | [16-windows-dirty-volume.md](docs/16-windows-dirty-volume.md) | —（fstab 只读挂载） |
+| 17 | **DSH 日常改用 Web 端：无头服务 + 网页快捷方式（开机不弹客户端）** | [17-dsh-web-headless.md](docs/17-dsh-web-headless.md) | —（systemd user 服务 + 两个启动器） |
 | 17 | **G1 盘开机自动挂载；ntfs-3g 与 ntfs3 怎么选** | [17-g1-automount.md](docs/17-g1-automount.md) | —（fstab 挂载） |
 | 18 | **问题覆盖面地图：哪些坑写了、哪些还没写** | [18-coverage-map.md](docs/18-coverage-map.md) | — |
 | 19 | **没声音：PipeWire 的正确排查顺序** | [19-audio-pipewire.md](docs/19-audio-pipewire.md) | — |
@@ -118,6 +119,7 @@
 │   ├── 14-appendix-commands.md
 │   ├── 15-unresolved.md
 │   ├── 16-windows-dirty-volume.md
+│   ├── 17-dsh-web-headless.md
 │   └── dsh-profile-tuning.md
 ├── scripts/                  # 幂等修复脚本（都先备份再改）
 ├── gnome-extension/          # 本地 GNOME Shell 扩展源码
