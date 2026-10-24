@@ -7,7 +7,7 @@
 #       材质层的 background-color 与 backdrop-filter，并用 !important 压过。
 #
 # 用法：
-#   scripts/dsh-menu-frost.sh              # 默认 0.80 / 24px
+#   scripts/dsh-menu-frost.sh              # 默认 0.65 / 28px
 #   scripts/dsh-menu-frost.sh 0.65 32      # 更透、模糊更强
 #   scripts/dsh-menu-frost.sh --remove     # 移除覆盖，恢复主题原样
 #
@@ -15,11 +15,11 @@
 # 升级 DSH 后重跑一次即可（构建产物 index-*.css 会被重新生成）。
 set -euo pipefail
 
-ALPHA="${1:-0.80}"
-BLUR="${2:-24}"
+ALPHA="${1:-0.65}"
+BLUR="${2:-28}"
 MODE="apply"
 case "${1:-}" in
-    --remove|-r) MODE="remove"; ALPHA="0.80"; BLUR="24" ;;
+    --remove|-r) MODE="remove"; ALPHA="0.65"; BLUR="28" ;;
 esac
 
 DRI="$HOME/.local/share/dsh-tauri/dependencies"
