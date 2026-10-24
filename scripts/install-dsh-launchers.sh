@@ -41,7 +41,6 @@ Icon=deepseek-harness-desktop-visible
 Terminal=false
 Categories=Development;Network;
 StartupNotify=true
-StartupWMClass=firefox
 Keywords=DSH;DeepSeek;Harness;web;
 EOF
 
