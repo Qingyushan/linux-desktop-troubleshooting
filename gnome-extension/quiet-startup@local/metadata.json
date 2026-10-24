@@ -1,7 +1,0 @@
-{
-  "uuid": "quiet-startup@local",
-  "name": "Quiet Startup",
-  "description": "登录后把指定应用（QQ / 微信 / DSH 等）的窗口立刻最小化，只保留托盘图标。",
-  "shell-version": ["50"],
-  "version": 1
-}

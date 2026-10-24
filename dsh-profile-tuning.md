@@ -214,7 +214,6 @@ GNOME 的 WebKit 界面没法开 devtools，但页面本身是普通网页。用
 | `scripts/set-scale.py` | Mutter 显示缩放（1.0 / 1.25 / 1.5），持久化到 monitors.xml |
 | `scripts/restart-dsh.sh` | 延迟完全退出并重启 DSH（`setsid nohup ./restart-dsh.sh 20`），日志 `/tmp/dsh-relaunch.log` |
 | `dsh/profile-config/` | 本次档案的配置快照（`package.json` / `cordis.patch.yml` / `compatibility.json` / `pnpm-workspace.yaml`），不含 `node_modules` |
-| `gnome-extension/grid-density@local/` | 10×5 网格、图标 80px 的 GNOME 扩展（装到 `~/.local/share/gnome-shell/extensions/`） |
 
 ## 8. 回滚
 
