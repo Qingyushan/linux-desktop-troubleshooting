@@ -78,7 +78,7 @@ GNOME 50 的 `js/ui/iconGrid.js` 里：
 - 即使列数改成功，**分页也不会自动重排**（页成员在插入时固定），需要额外触发 `_redisplay()`，而它和布局重算的时序很难保证。
 - 每轮修改都要**注销重启 shell** 才能加载（GJS 模块缓存，GNOME 50 没有实现 `org.gnome.Shell.Extensions.ReloadExtension`），试错成本对用户太高。
 
-**现状**：`gnome-extensions disable grid-density@local` 已执行，`enabled-extensions` 里只剩 `quiet-startup@local`，网格回到默认 7 列。
+**现状（2026-10-24 更新）**：扩展已彻底移除——`~/.local/share/gnome-shell/extensions/grid-density@local` 已删除，仓库里的源码也一并删掉，只在本文保留这段失败记录；`enabled-extensions` 现在只剩 `quiet-startup@local`。
 
 **如果还要做**，只剩两条路：装一个维护中的第三方网格扩展（要在 extensions.gnome.org 上确认支持 GNOME 50），或者直接改 shell 源码（不建议）。本文不再提供这段代码。
 
@@ -240,3 +240,37 @@ cd ~/.dsh/profiles/better-deepseek-harness-codex && pnpm install
 6. **UI 空壳优先怀疑 slot 提供方被禁用**，而不是样式问题。
 7. **headless 浏览器是读 WebKit 应用 DOM 的可靠手段**，比 `gnome-screenshot`（Wayland 下还被 D-Bus 权限挡住）靠谱。
 8. **删除插件走 `dsh plugin remove`**，让它对账 `bundles`；手改很容易留下悬挂条目。
+
+## 10. 补充：`dsh-ui` 卡片不是 Markdown，依赖 genui 客户端插件
+
+### 现象
+
+助手回复里的 ` ```dsh-ui ` 围栏被当成普通代码块，界面直接显示原始 JSON。
+
+### 根因
+
+`dsh-ui` 不是 Markdown 扩展，而是 `@changfenhuang/dsh-genui` 提供的渲染器：host 半负责教模型说这种围栏，浏览器半注册真正的卡片渲染。当前档案是从整合包安装的 `better-deepseek-harness-codex`，它的依赖里**没有 genui**（原来的 `tauri` 档案里有），所以围栏退化成代码块。
+
+### 怎么判断（别靠猜）
+
+直接看服务端渲染出来的 boot 载荷里有没有这个客户端条目：
+
+```bash
+curl -s http://127.0.0.1:3080/ | grep -o '"id":"@changfenhuang/dsh-genui"'
+```
+
+没有输出 = 渲染器没装；有输出但界面仍是 JSON = 页面需要刷新。
+
+### 修复
+
+```bash
+cd ~/.dsh/profiles/better-deepseek-harness-codex
+DSH_HOME=~/.dsh dsh plugin --profile better-deepseek-harness-codex add @changfenhuang/dsh-genui@0.14.0
+```
+
+装完**不需要重启 DSH**：宿主会热加载，技能目录里立刻出现 `genui` 技能、boot 载荷里出现客户端条目；已打开的页面刷新一次即可。
+
+### 经验
+
+- “渲染没生效”先分清两种情况：**模型没写对格式**，还是**客户端没装渲染器**。后者查 boot 载荷最快。
+- 整合包会替换掉宿主默认的一部分插件组合，换档案后要重新确认“上一套能力还在不在”，不要假定某个功能仍然可用。
