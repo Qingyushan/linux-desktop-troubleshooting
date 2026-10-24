@@ -14,7 +14,9 @@
   1. 窗口名：`wm_class` / `app_id`，精确比对 + 长标识（≥4 字符）包含匹配；
   2. 进程兜底：`win.get_pid()` → 读 `/proc/<pid>/cmdline`，命中 `/opt/qq/qq`、`wechat`、`deepseek-harness-desktop`；
 - 首次命中即使窗口带着焦点也压下去（登录时 autostart 窗口通常自带焦点）；
-- **只管启动阶段出现的窗口**：从扩展 enable 起 `startupPhaseSeconds`（默认 45 秒）内第一次看到的窗口才可能被压；之后出现的窗口（你手动开 QQ、QQ 自己新建聊天窗）**一律不管**——否则登录后 5 分钟内你开一次 QQ 就被收一次；
+- **先判断"这是不是自启的进程"**：`autostartProcessGraceSeconds`（默认 120 秒）——进程比 GNOME Shell 晚启动超过 2 分钟，就当作用户自己打开的程序，**整个进程都不管**（QQ 登录时 2 秒内就起来了，而你手动开的是几分钟后，区分得很干净）；
+- **只管启动阶段出现的窗口**：从扩展 enable 起 `startupPhaseSeconds`（默认 60 秒）内第一次看到的窗口才可能被压；之后出现的窗口（QQ 新建聊天窗）**一律不管**；
+- **只在登录时启用才接管**：扩展如果是会话中途被启用/重载的（shell 已运行远超启动阶段），直接进入 inert，不动任何窗口——否则装个新版本插件的瞬间就会把你正在用的窗口收走；
 - **短暂的"自动登录宽限"**：从该窗口第一次被压算起 `focusGraceSeconds`（默认 10 秒）内，即使窗口有焦点也继续压，用来覆盖 QQ / 微信自动登录完成后自己把面板顶回来的几下；
 - **超出宽限后，窗口一拿到焦点就永久让位**（内部记 `yielded`），之后无论它怎么失焦、怎么切换都再也不碰它 —— 这样你正在用的时候不会被反复收回；
 - 同一窗口两次压制至少间隔 `minRetryGapSeconds`（默认 2 秒），避免 500ms 的扫描节奏把应用连击；
@@ -138,7 +140,13 @@ sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
 1. **"第一次看到就压"没有时间边界**：`loginWindowSeconds=300` 意味着登录后 5 分钟内，任何新出现的匹配窗口都会被当自启窗口压掉。用户 4 分半时自己开 QQ，立刻被收走。
 2. **让位只按窗口记，不按进程记**：接管了窗口 A，QQ 又新建窗口 B，B 没有 yield 标记，于是从头再压一遍。
 
-修法：加 `startupPhaseSeconds`（默认 45 秒）只接管启动阶段的窗口；让位改成按 pid 记（`_yieldedPids`），该程序之后新建的窗口一律不碰。
+修法：
+1. `startupPhaseSeconds`（默认 60 秒）：只接管启动阶段出现的窗口；
+2. 让位按 pid 记（`_yieldedPids`），该程序之后新建的窗口一律不碰；
+3. `autostartProcessGraceSeconds`（默认 120 秒）：进程比 shell 晚启动超过 2 分钟就整个不管——这是最本质的一条，QQ 登录时 2 秒内就启动，手动打开是几分钟后；
+4. 中途启用（shell 已运行很久）直接 inert，避免"装版本→扩展重载→把当前窗口收走"。
+
+> 另一个血泪点：**改完扩展文件不会立刻生效**，GNOME Shell 把 ESM 模块缓存在内存里（`gnome-extensions disable/enable` 也只是重跑旧模块）。判据：日志头里有没有新字段（如 `shellUptime=`）。没有就说明还在跑旧代码，必须注销重登。
 
 **踩过的坑**：**踩过的坑**：
 

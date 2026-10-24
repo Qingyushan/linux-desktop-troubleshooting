@@ -41,7 +41,8 @@ if [ ! -f "$CFG_DIR/config.json" ]; then
     cat > "$CFG_DIR/config.json" <<'JSON'
 {
   "loginWindowSeconds": 300,
-  "startupPhaseSeconds": 45,
+  "startupPhaseSeconds": 60,
+  "autostartProcessGraceSeconds": 120,
   "maxRetries": 5,
   "focusGraceSeconds": 10,
   "minRetryGapSeconds": 2,

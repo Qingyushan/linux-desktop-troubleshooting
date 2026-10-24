@@ -40,7 +40,9 @@ const DEFAULTS = {
     loginWindowSeconds: 300,
     // 从 enable 起多久之内"第一次看到"的窗口才归扩展管（秒）。
     // 超时后新出现的窗口一律不管：那是用户自己开的，不是开机自启。
-    startupPhaseSeconds: 45,
+    startupPhaseSeconds: 60,
+    // 进程比 shell 晚启动超过这个秒数，就当作用户自己开的，一律不管（秒）
+    autostartProcessGraceSeconds: 120,
     maxRetries: 5,
     // 从"首次压制"起算的短暂宽限（秒）：这段时间内无视焦点继续压，
     // 覆盖 QQ / 微信 自动登录后把窗口顶回来的几下。
@@ -73,6 +75,8 @@ export default class QuietStartupExtension extends Extension {
         this._procs = this._cfg.processes.map(p => `${p}`.toLowerCase());
         this._maxRetries = Math.max(0, Number(this._cfg.maxRetries) || 0);
         this._phaseUs = Math.max(0, Number(this._cfg.startupPhaseSeconds) || 0) * 1000000;
+        this._procGraceSec = Math.max(0, Number(this._cfg.autostartProcessGraceSeconds) || 0);
+        this._procVerdicts = new Map();
         this._phaseDeadline = GLib.get_monotonic_time() + this._phaseUs;
         this._yieldedPids = new Set();
         this._graceUs = Math.max(0, Number(this._cfg.focusGraceSeconds) || 0) * 1000000;
@@ -85,8 +89,16 @@ export default class QuietStartupExtension extends Extension {
         this._timer = 0;
         this._windowSignal = 0;
 
-        this._log(`== enable: apps=${this._apps.join(',')} procs=${this._procs.join(',')} window=${this._cfg.loginWindowSeconds}s`);
-        this._logExisting();
+        const uptime = this._shellUptimeSeconds();
+        const late = uptime > Math.max(60, this._phaseUs / 1000000 * 2);
+        this._log(`== enable: apps=${this._apps.join(',')} procs=${this._procs.join(',')} window=${this._cfg.loginWindowSeconds}s shellUptime=${uptime.toFixed(0)}s${late ? ' (late: 不接管任何窗口)' : ''}`);
+        if (late) {
+            // 会话中途启用（例如装了新版本被 shell 重载）：只记录，不动任何窗口
+            this._phaseDeadline = GLib.get_monotonic_time() - 1;
+            this._deadline = GLib.get_monotonic_time() - 1;
+        } else {
+            this._logExisting();
+        }
 
         this._windowSignal = global.display.connect('window-created', (_display, win) => {
             if (this._expired())
@@ -192,6 +204,21 @@ export default class QuietStartupExtension extends Extension {
         const hit = this._match(win);
         if (!hit)
             return;
+
+        // 进程级判定：比 shell 晚启动太久 = 用户自己开的程序，整个进程都不管
+        if (pid) {
+            let verdict = this._procVerdicts.get(pid);
+            if (verdict === undefined) {
+                const delay = this._procStartDelaySeconds(pid);
+                verdict = delay >= 0 && delay > this._procGraceSec;
+                this._procVerdicts.set(pid, verdict);
+                if (verdict) {
+                    this._log(`skip-process: pid=${pid} 比 shell 晚启动 ${delay.toFixed(0)}s（>${this._procGraceSec}s），视为用户自己打开`);
+                }
+            }
+            if (verdict)
+                return;
+        }
 
         // 启动阶段之外的"新窗口"一律不管：那是用户自己开的，不是开机自启
         if (GLib.get_monotonic_time() > this._phaseDeadline && !(this._states.get(win)?.retries > 0)) {
@@ -331,6 +358,48 @@ export default class QuietStartupExtension extends Extension {
             return merged;
         } catch {
             return {...DEFAULTS};
+        }
+    }
+
+    /** 当前 GNOME Shell 进程已运行的秒数；取不到时返回 0（当作"刚登录"）。 */
+    _shellUptimeSeconds() {
+        try {
+            const [okUp, upBytes] = GLib.file_get_contents('/proc/uptime');
+            const [okStat, statBytes] = GLib.file_get_contents('/proc/self/stat');
+            if (!okUp || !okStat)
+                return 0;
+            const uptime = parseFloat(new TextDecoder().decode(upBytes).split(' ')[0]);
+            const stat = new TextDecoder().decode(statBytes);
+            // comm 可能含空格/括号，从最后一个 ')' 之后开始切
+            const rest = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+            const startTicks = Number(rest[19]); // 第 22 字段 starttime
+            if (!Number.isFinite(uptime) || !Number.isFinite(startTicks))
+                return 0;
+            return Math.max(0, uptime - startTicks / 100);
+        } catch {
+            return 0;
+        }
+    }
+
+    /** 进程比 GNOME Shell 晚启动多少秒；取不到返回 -1（当作"按原样处理"）。 */
+    _procStartDelaySeconds(pid) {
+        if (!pid)
+            return -1;
+        try {
+            const [okUp, upBytes] = GLib.file_get_contents('/proc/uptime');
+            const [okStat, statBytes] = GLib.file_get_contents(`/proc/${pid}/stat`);
+            if (!okUp || !okStat)
+                return -1;
+            const uptime = parseFloat(new TextDecoder().decode(upBytes).split(' ')[0]);
+            const stat = new TextDecoder().decode(statBytes);
+            const rest = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+            const startTicks = Number(rest[19]);
+            if (!Number.isFinite(uptime) || !Number.isFinite(startTicks))
+                return -1;
+            const procUptime = uptime - startTicks / 100;
+            return this._shellUptimeSeconds() - procUptime;
+        } catch {
+            return -1;
         }
     }
 
