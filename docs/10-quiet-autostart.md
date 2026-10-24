@@ -14,8 +14,10 @@
   1. 窗口名：`wm_class` / `app_id`，精确比对 + 长标识（≥4 字符）包含匹配；
   2. 进程兜底：`win.get_pid()` → 读 `/proc/<pid>/cmdline`，命中 `/opt/qq/qq`、`wechat`、`deepseek-harness-desktop`；
 - 首次命中即使窗口带着焦点也压下去（登录时 autostart 窗口通常自带焦点）；
-- **应用自己把窗口顶回来就继续压**：只要距上次压制还不到 `focusGraceSeconds`（默认 60 秒），即使窗口有焦点也照样压——QQ 自动登录完成后会自己连顶 3~4 次，不这样处理就会留在屏幕上；超过宽限期又带焦点，才当成你手动还原、让位；
-- 每个窗口最多压 `maxRetries`（默认 8）次，避免和应用无限对打；
+- **短暂的"自动登录宽限"**：从该窗口第一次被压算起 `focusGraceSeconds`（默认 10 秒）内，即使窗口有焦点也继续压，用来覆盖 QQ / 微信自动登录完成后自己把面板顶回来的几下；
+- **超出宽限后，窗口一拿到焦点就永久让位**（内部记 `yielded`），之后无论它怎么失焦、怎么切换都再也不碰它 —— 这样你正在用的时候不会被反复收回；
+- 同一窗口两次压制至少间隔 `minRetryGapSeconds`（默认 2 秒），避免 500ms 的扫描节奏把应用连击；
+- 每个窗口总共最多压 `maxRetries`（默认 5）次；
 - 300 秒后彻底放手，之后手动开这些应用、开新的聊天窗口都不受影响。
 
 安装（幂等，可重复执行）：
@@ -98,6 +100,23 @@ sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
 
 两个问题：① `maxRetries=3` 太少，QQ 顶的次数比这多；② 原来的「有焦点就让位」规则把"应用自己顶上来"误判成"用户手动还原"。改法就是上面的宽限期 + 提高重试次数 + 窗口期延长到 300 秒。
 
+**复盘三：QQ 在使用中被反复收回（16:55 那次登录）**
+
+把宽限期从"距上次压制"改成"从首次压制起算"之前，宽限是**滑动**的：每压一次就把宽限重置一次，于是扫描每 500ms 看到窗口又被应用顶回来就再压一次，日志里 5 秒内连压 6 次：
+
+```
+[16:55:40] minimize(scan#3): app=qq
+[16:55:41] minimize(scan#4): app=qq
+[16:55:43] minimize(scan#5): app=qq
+[16:55:43] minimize(scan#6): app=qq
+[16:55:44] minimize(scan#7): app=qq
+[16:55:45] minimize(scan#8): app=qq
+```
+
+用户在用的是时候窗口就被这样反复收走。修法三条（见上）：宽限从"首次压制"起算且只有 10 秒、**宽限过后一有焦点就永久 `yielded`**、两次压制之间至少隔 2 秒。
+
+> 顺带记一个常被误解的点：**autostart 入口不是常驻脚本**。`~/.config/autostart/*.desktop` 的 `Exec` 就是应用本身（如 `/opt/QQ/qq`），启动完就退出，没有后台进程；维持"登录后别弹窗"的是 GNOME Shell 扩展，它在 `loginWindowSeconds`（300 秒）后自己 disarm，日志里会打印 `disarm: login window elapsed`，之后完全不再扫描窗口。
+
 **踩过的坑**：
 
 - 旧 AppImage 时代留下的 `~/.config/autostart/Deepseek Harness Desktop.desktop` 是重复入口，会让 DSH 被拉起两次（第二次激活还会把刚最小化的窗口顶回来）；已挪到 `~/.config/autostart-disabled/`。
@@ -107,4 +126,5 @@ sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
 - 自启入口里带 `X-GNOME-Autostart-Delay` 是为了错开登录瞬间的 IO；DSH 自己设置里的"开机自启"如果被重开，可能把 `Exec` 改回不带延迟的原始命令——窗口仍然会被扩展最小化，不影响结果。
 - 改完 `extension.js` **必须重新登录**才生效：GNOME 45+ 用 ESM 加载扩展，`gnome-extensions disable/enable` 会复用模块缓存，改了代码也不会重新读（实测日志里还是旧格式）。改 `config.json` 则只需 disable/enable。
 - autostart 应用的窗口在登录阶段本来就会带焦点，「有焦点就让位」不能当通用规则用；正确做法是"刚压过就无视焦点、隔久了才让位"（`focusGraceSeconds`）。
+- 但"刚压过就无视焦点"如果做成**滑动**宽限，就会变成 500ms 一次的连击。正确做法是：宽限只从首次压制起算，且宽限结束后**焦点 = 永久让位**，两次压制之间再加最小间隔。
 - 别用"窗口有焦点就不压"当作首次命中的条件：autostart 的窗口本来就会拿焦点，加了这条等于一个都不压。正确做法是首次命中照压、只在"用户还原后"让位。

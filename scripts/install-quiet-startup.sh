@@ -41,8 +41,9 @@ if [ ! -f "$CFG_DIR/config.json" ]; then
     cat > "$CFG_DIR/config.json" <<'JSON'
 {
   "loginWindowSeconds": 300,
-  "maxRetries": 8,
-  "focusGraceSeconds": 60,
+  "maxRetries": 5,
+  "focusGraceSeconds": 10,
+  "minRetryGapSeconds": 2,
   "apps": [
     "deepseek-harness-desktop",
     "deepseek-harness",
