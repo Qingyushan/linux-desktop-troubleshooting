@@ -88,7 +88,7 @@
 
 | 优先级 | 领域 | 典型症状 | 第一篇该写什么 | 本机现状 |
 |---|---|---|---|---|
-| ★★★ | **远程桌面（RDP/VNC）** | 想从另一台机器连进来；Wayland 下 VNC 方案失效 | `gnome-remote-desktop` + `grdctl` 开启 RDP、gnome-connections 连接、与旧 VNC 的区别 | **已装** `gnome-remote-desktop`（| `grdctl` 可用），尚未写过 |
+| ★★★ | **远程桌面（RDP/VNC）** | 想从另一台机器连进来；Wayland 下 VNC 方案失效 | `gnome-remote-desktop` + `grdctl` 开启 RDP、gnome-connections 连接、与旧 VNC 的区别 | **已装** `gnome-remote-desktop`，`grdctl` 可用；尚未写过 |
 | ★★☆ | **外接显示器 / 多屏缩放** | 接上显示器后缩放不一致、窗口跑屏、热插拔不识别 | `gnome-monitor-config` / Mutter 的 fractional scaling、`xrandr` 在 Wayland 下的边界 | 5 个 DRM 连接器，**只有 eDP-1 连接**（未接外屏） |
 | ★☆☆ | **显示器色温 / 夜灯 / HDR** | 偏色、夜间刺眼、HDR 不生效 | GNOME 夜灯、`colord` 配置、HDR 需要合成器+显卡支持 | 未遇到 |
 
