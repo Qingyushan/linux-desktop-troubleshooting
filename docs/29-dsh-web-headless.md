@@ -5,12 +5,12 @@
 ## 为什么要这么改
 
 - DSH 桌面客户端是 Tauri + WebKitGTK。本机实测**不是软件渲染**（`nvidia-smi pmon` 里它是 NVIDIA graphics client，打开 renderD129、持有 dma-buf），但同一个 WebKit 引擎测「毛玻璃 + 动画」页面四种模式都只有 62 fps，说明瓶颈在**页面本身**（95 个客户端插件、0.9 MB 入口 JS、`backdrop-filter` 毛玻璃），而 Firefox 的 WebRender 处理这类负载明显更顺。
-- 结论：**日常用 Firefox 打开 `http://127.0.0.1:3080`**，桌面客户端只在需要托盘/宠物时人工启动。
+- 结论：**日常用独立浏览器打开 `http://127.0.0.1:3080`**，桌面客户端只在需要托盘/宠物时人工启动。2026-10-24 起按用户要求网页版启动器默认用 **Google Chrome** 打开（`CHROME_BIN` 可覆盖，改回 Firefox 只需设 `CHROME_BIN=/usr/bin/firefox`）。
 
 于是要做两件事：
 
 1. 后端改成**无头常驻**（跑 harness web 服务，不创建任何窗口）；
-2. 加一个**网页快捷方式**，点一下就能在 Firefox 里打开（后端没起会自动拉起）。
+2. 加一个**网页快捷方式**，点一下就能在浏览器里打开（当前默认 Chrome；后端没起会自动拉起）。
 
 > 仓库里对应的可复制实现：`scripts/install-dsh-launchers.sh`（一次装好 `dsh-web`、`dsh-client`、桌面入口与 systemd 单元）、`scripts/dsh-web.sh`、`scripts/dsh-client.sh`、`systemd/dsh-harness.service`、`systemd/dsh-appearance.service`。
 
@@ -19,7 +19,7 @@
 | 文件 | 作用 |
 | --- | --- |
 | `~/.config/systemd/user/dsh-harness.service` | 登录时以 systemd user 服务启动 harness（profile `better-deepseek-harness-codex`，端口 3080），无窗口 |
-| `~/.local/bin/dsh-web` | 打开 web 端：3080 通就直接开 Firefox；不通就 `systemctl --user start dsh-harness`，等 60 秒；还不行就退回启动桌面客户端（保证总有 UI） |
+| `~/.local/bin/dsh-web` | 打开 web 端：3080 通就直接开 Chrome（`CHROME_BIN` 可覆盖）；不通就先拉起桌面客户端，等最多 90 秒；还不行就通知失败 |
 | `~/.local/share/applications/dsh-web.desktop` | 应用菜单项「DeepSeek Harness（网页版）」 |
 | `~/桌面/DeepSeek Harness（网页版）.desktop` | 桌面图标（已 `chmod +x` + `metadata::trusted`） |
 | `~/.local/bin/dsh-client` + `dsh-client.desktop` | 需要桌面客户端时用：会先 `systemctl --user stop dsh-harness`（避免 3080 冲突）再启动客户端 |
@@ -90,7 +90,7 @@ ss -tlnp | grep 3080
 # 2) 登录后应无客户端窗口，但托盘里也不再有 DSH 图标（客户端没启动，属预期）
 pgrep -af deepseek-harness-desktop || echo "客户端未运行（符合预期）"
 
-# 3) 点桌面/菜单里的「DeepSeek Harness（网页版）」，应直接在 Firefox 新窗口打开
+# 3) 点桌面/菜单里的「DeepSeek Harness（网页版）」，应直接在 Chrome 新窗口打开
 ```
 
 ## 注意 / 回滚
@@ -116,7 +116,7 @@ pgrep -af deepseek-harness-desktop || echo "客户端未运行（符合预期）
 - **桌面客户端是 3080 的唯一宿主**：恢复开机自启（`auto_start=true` + `~/.config/autostart/deepseek-harness-desktop.desktop`），登录后由 `quiet-startup` 扩展把它最小化到托盘；
 - **systemd 无头服务停用**（`systemctl --user disable dsh-harness.service`，单元文件保留备用）；
 - `dsh-client` 只负责启动客户端，**不再 stop 任何服务**；
-- `dsh-web`：3080 已通就直接开 Firefox；没通就先拉起桌面客户端，等最多 90 秒；
+- `dsh-web`：3080 已通就直接开 Chrome；没通就先拉起桌面客户端，等最多 90 秒；
 - `quiet-startup` 名单里重新加入 DSH（否则登录会弹客户端窗口）。
 
 ### 代价

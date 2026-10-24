@@ -17,4 +17,12 @@ if ! up; then
     exit 1
 fi
 
-exec firefox --new-window "$URL"
+# 优先用 Chrome 打开（可用 CHROME_BIN 覆盖，例如回退到 firefox）
+CHROME="${CHROME_BIN:-/usr/bin/google-chrome-stable}"
+if [ -x "$CHROME" ]; then
+    exec "$CHROME" --new-window "$URL"
+fi
+if command -v google-chrome >/dev/null 2>&1; then
+    exec google-chrome --new-window "$URL"
+fi
+exec xdg-open "$URL"
