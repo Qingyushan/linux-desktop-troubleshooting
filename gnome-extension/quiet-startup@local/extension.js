@@ -18,7 +18,10 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
  *
  * 时序：登录窗口期内（默认 150 秒）
  *   - 首次命中：立刻 minimize()，即使窗口自带焦点（登录时 autostart 窗口通常有焦点）；
- *   - 已处理过的窗口被应用自己弹回来：窗口没有焦点时再压，最多 maxRetries 次；
+ *   - 已处理过的窗口被应用自己弹回来：只要距上次压制还不到 focusGraceSeconds，
+ *     即使它有焦点也继续压（QQ 自动登录完成后会自己把主面板顶上来，实测连顶 3~4 次）；
+ *     超过这个宽限期、且窗口有焦点，才认为是你手动还原，让位；
+ *   - 最多压 maxRetries 次，避免和应用无限对打；
  *   - 到期彻底放手，之后手动开这些应用、开新聊天窗口都不受影响。
  *
  * 配置：~/.config/quiet-startup/config.json（改完 disable/enable 生效，不用重登）
@@ -33,8 +36,11 @@ const SCAN_INTERVAL_MS = 500;
 const NAME_RECHECK_MS = 250;
 
 const DEFAULTS = {
-    loginWindowSeconds: 150,
-    maxRetries: 3,
+    loginWindowSeconds: 300,
+    maxRetries: 8,
+    // 距上次压制多久之内"不因为窗口有焦点就让位"（秒）。
+    // QQ 自动登录、微信登录完成后都会自己把窗口顶上来，宽限期内继续压。
+    focusGraceSeconds: 60,
     // 窗口名标识：先精确比对 wm_class / app_id，再做「长度 >= 4 且被包含」的模糊匹配
     // （覆盖 com.tencent.wechat / wechat-beta 这类变体；短标识如 qq 只做精确匹配）
     apps: [
@@ -60,6 +66,7 @@ export default class QuietStartupExtension extends Extension {
         this._apps = this._cfg.apps.map(a => `${a}`.toLowerCase());
         this._procs = this._cfg.processes.map(p => `${p}`.toLowerCase());
         this._maxRetries = Math.max(0, Number(this._cfg.maxRetries) || 0);
+        this._graceUs = Math.max(0, Number(this._cfg.focusGraceSeconds) || 0) * 1000000;
         this._deadline = GLib.get_monotonic_time()
             + Math.max(1, Number(this._cfg.loginWindowSeconds) || DEFAULTS.loginWindowSeconds) * 1000000;
         this._states = new WeakMap();
@@ -145,10 +152,14 @@ export default class QuietStartupExtension extends Extension {
 
         const handled = this._states.get(win);
         if (handled && handled.retries > 0) {
-            // 处理过：只在应用自己把窗口弹回来、且用户没在动它时再压
+            // 处理过：应用自己把窗口弹回来就继续压，但要防无限对打
             if (handled.retries > this._maxRetries)
                 return;
-            if (win.has_focus?.() === true)
+            // 刚压下去又被弹回来 = 应用自己在抢（QQ 自动登录后就是这种），
+            // 宽限期内不看焦点；超出宽限期还带焦点，才当成你手动还原。
+            const recent = handled.lastMs > 0
+                && (GLib.get_monotonic_time() - handled.lastMs) < this._graceUs;
+            if (!recent && win.has_focus?.() === true)
                 return;
         }
 
@@ -160,6 +171,7 @@ export default class QuietStartupExtension extends Extension {
         try {
             win.minimize();
             state.retries++;
+            state.lastMs = GLib.get_monotonic_time();
             this._log(`minimize(${reason}#${state.retries}): ${hit.kind}=${hit.key} pid=${this._pid(win)} names=${this._names(win).join('|') || '-'}`);
         } catch (e) {
             this._log(`error(minimize): ${e.message ?? e}`);
@@ -241,7 +253,7 @@ export default class QuietStartupExtension extends Extension {
     _state(win) {
         let state = this._states.get(win);
         if (!state) {
-            state = {retries: 0};
+            state = {retries: 0, lastMs: 0};
             this._states.set(win, state);
         }
         return state;

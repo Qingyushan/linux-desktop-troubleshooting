@@ -40,8 +40,9 @@ mkdir -p "$CFG_DIR"
 if [ ! -f "$CFG_DIR/config.json" ]; then
     cat > "$CFG_DIR/config.json" <<'JSON'
 {
-  "loginWindowSeconds": 150,
-  "maxRetries": 3,
+  "loginWindowSeconds": 300,
+  "maxRetries": 8,
+  "focusGraceSeconds": 60,
   "apps": [
     "deepseek-harness-desktop",
     "deepseek-harness",
