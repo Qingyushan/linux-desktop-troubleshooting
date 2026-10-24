@@ -130,15 +130,15 @@ body{--dsw-specific-menu:#f8f9fa !important}                     /* 浅色 */
 body[data-ds-dark-theme]{--dsw-specific-menu:#303136 !important}  /* 深色 */
 ```
 
-实测（客户端 + Firefox 网页端一致）：卡片不再透，菜单仍是 65% + 28px 毛玻璃。
+实测（客户端 + Firefox 网页端一致）：卡片不再透（token 接近实色）；菜单保持毛玻璃。
 
 ### 4. 验证（两种主题都测）
 
 无头 Chrome 里 `Emulation.setEmulatedMedia` 切 `prefers-color-scheme`，再点开菜单读计算样式，期望：
 
 ```
-LIGHT: menu rgba(248,249,250,0.82) blur(36px) | panel rgba(248,249,250,0.80) blur(40px)
-DARK : menu rgba(67,69,74,0.82)     blur(36px) | panel rgba(67,69,74,0.80)     blur(40px)
+LIGHT: rgba(248, 249, 250, 0.82)  bf blur(36px) saturate(1.5)
+DARK : rgba(67, 69, 74, 0.82)     bf blur(36px) saturate(1.5)
 ```
 
 ## 回滚
