@@ -45,44 +45,42 @@ python3 scripts/set-scale.py 1.0    # 回退
 
 ---
 
-## 2. GNOME 应用网格密度：只能靠扩展
+## 2. GNOME 应用网格密度：尝试过，**未采用**
 
 ### 现象
 
-100% 时应用网格 7 列 × 3 行，图标 96px，一屏装不下多少东西，中间大片留白。
+1920×1080、125% 缩放下应用网格是 7 列 × 3 行、图标 96px，一屏装的东西偏少。
 
-### 判断
+### 调研结论（这部分仍然有效）
 
-查了 GNOME 50 的 `js/ui/iconGrid.js`：
+GNOME 50 的 `js/ui/iconGrid.js` 里：
 
-- 每页行列数来自固定的 `defaultGridModes`（3×8、4×6、6×4、8×3 几档），按屏幕宽高比挑一档，**没有任何 gschema 可调**。
-- 图标尺寸在 `fixed-icon-size === -1` 时按 `IconSize.LARGE`（96）算。
+- 每页行列数来自固定的 `defaultGridModes`，按屏幕宽高比挑一档，**没有 gschema 可调**；
+- 图标尺寸在 `fixed-icon-size === -1` 时按 `IconSize.LARGE`（96）算；
+- 页成员是在插入时按 `itemsPerPage`（columns × rows）定的。
 
-所以要改密度，唯一干净的路子是一个本地扩展：替换 `_gridModes` 并把 `fixed-icon-size` 钉住。
+### 尝试
 
-### 修复
+写了一个本地扩展 `grid-density@local`：替换 `_gridModes`、直接写 `layout_manager.columnsPerPage/rowsPerPage`、在 `Main.overview` 的 `showing/shown` 上再应用一次，并调用 `AppDisplay._redisplay()` 重新分页。
 
-`gnome-extension/grid-density@local/`（安装到 `~/.local/share/gnome-shell/extensions/`），改成 10 列 × 5 行、图标 80px：
+### 结果：不稳定，已回退
 
-```jsonc
-// config.json
-{ "iconSize": 80, "rows": 5, "columns": 10 }
-```
+| 阶段 | 观察 |
+|---|---|
+| 首次启用 | 网格确实变成 10 列，但图标仍是 96px（`adaptToSize` 因页面尺寸未变 early-return，不重算图标），标签被下一行图标压住 |
+| 加 `_pageWidth=-1` 强制重算 + `_redisplay()` | 打开总览后 800ms 的探针仍是 `columns=7 rows=3`：`AppGrid` 在 allocation 时按自己的 modes 重新套用，注入被覆盖 |
+| 用实例级 `_findBestModeForSize` 覆盖 | `currentMode` 始终是 `-1`，说明覆盖没被调用到；改成直接写布局属性也只是短暂生效 |
+| 重启机器后 | 完全回到默认 7×3，扩展处于启用状态却无效果 |
 
-关键实现：
+### 为什么放弃
 
-```js
-const grid = Main.overview?.controls?._appDisplay?._grid;
-grid.layout_manager.fixedIconSize = cfg.iconSize;
-grid._gridModes = [{ rows: cfg.rows, columns: cfg.columns }];
-grid._currentMode = -1;            // 不重置就不会重新套用模式
-grid.queue_relayout();
-```
+- 这是 **Shell 内部布局**，不是公开 API；`AppGrid` 每次 allocation 都会重算 mode，注入点要么被覆盖、要么根本没被调用。
+- 即使列数改成功，**分页也不会自动重排**（页成员在插入时固定），需要额外触发 `_redisplay()`，而它和布局重算的时序很难保证。
+- 每轮修改都要**注销重启 shell** 才能加载（GJS 模块缓存，GNOME 50 没有实现 `org.gnome.Shell.Extensions.ReloadExtension`），试错成本对用户太高。
 
-### 坑
+**现状**：`gnome-extensions disable grid-density@local` 已执行，`enabled-extensions` 里只剩 `quiet-startup@local`，网格回到默认 7 列。
 
-- **GNOME 只在登录时扫描扩展目录**。新装的扩展在会话内 `gnome-extensions enable` 会直接报「扩展不存在」，D-Bus 的 `org.gnome.Shell.Eval` 在 Ubuntu 上也是禁用的，没法热重载。装完必须注销重登一次；之后再调参数只需 `disable` + `enable`。
-- `max-column-spacing` 会被 `vfunc_style_changed` 从主题 CSS 重新读回，用代码设它等于白设——所以只钉 `fixed-icon-size` 和 mode。
+**如果还要做**，只剩两条路：装一个维护中的第三方网格扩展（要在 extensions.gnome.org 上确认支持 GNOME 50），或者直接改 shell 源码（不建议）。本文不再提供这段代码。
 
 ---
 
