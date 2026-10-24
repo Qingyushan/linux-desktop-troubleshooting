@@ -63,21 +63,33 @@
 
 ---
 
-## 2. 空白区（还没写，但迟早会踩）
+## 2. 系统层（19–28，已补齐）
 
-按「发生概率 × 排错成本」排序。**音频、Wayland 屏幕共享、蓝牙已补齐（19–21）**，下面是剩余缺口：
+原来列在"空白区"的问题，现已按「先实测、再写」补齐：
 
-| 优先级 | 领域 | 典型症状 | 为什么值得写 |
-|---|---|---|---|
-| ★★☆ | **系统更新后的内核/显卡** | 更新后黑屏、掉到 llvmpipe、nvidia 模块没编 | 低频但**致命**，一旦发生机器进不了图形界面 |
-| ★★☆ | **电源 / 续航 / 合盖休眠** | 合盖不睡、睡死、耗电快 | 笔记本常见；涉及 `systemd-logind` 与内核参数 |
-| ★★☆ | **Wi-Fi / DNS** | 连不上、能 ping IP 不能解析域名 | 排查路径固定（`nmcli` → `resolvectl` → 路由），适合写成清单 |
-| ★☆☆ | **Flatpak / Snap 沙箱权限** | 应用读不到 `~/Documents`、输入法不工作 | 本机 Firefox/Thunderbird 是 snap，早晚遇到 |
-| ★☆☆ | **字体渲染** | 中文发虚、粗体缺失、界面字体不一致 | 涉及 fontconfig 与 GNOME 字体设置，容易改乱 |
-| ★☆☆ | **打印 / 扫描** | 打印机添加失败、扫描仪不识别 | 低频，但 CUPS 日志对新手不友好 |
-| ★☆☆ | **触摸板 / 手势** | 三指手势、轻触点击、滚动方向 | 偏好类，非故障类 |
+| 领域 | 文档 | 本机实测依据 |
+|---|---|---|
+| 音频（PipeWire） | [19](19-audio-pipewire.md) | PipeWire 1.6.2、`pactl` 未装、ALC269VC + NVIDIA HDMI |
+| Wayland 屏幕共享 / 录屏 | [20](20-wayland-screenshare.md) | portal 1.21.1 / -gnome 50.0、`pipewiresrc` 可用 |
+| 蓝牙 | [21](21-bluetooth.md) | bluez 5.85、`hci0` 未 rfkill、已配对 OnePlus Buds Ace 3 |
+| 系统更新后黑屏 / 掉驱动 | [22](22-nvidia-kernel-update.md) | GTX 1060 Mobile + nvidia 580.178.04、Secure Boot enabled、内核 7.0.0-38 |
+| 电源与休眠 | [23](23-power-suspend.md) | `mem_sleep = s2idle [deep]`、logind 无覆盖、powerprofiles = performance |
+| Wi-Fi 与 DNS | [24](24-wifi-dns.md) | `wlp3s0` 已连、systemd-resolved stub、DNS 10.15.3.223 |
+| Snap / Flatpak 沙箱 | [25](25-flatpak-snap.md) | snapd 2.77.1、Firefox/Thunderbird 为 snap、flatpak 未装 |
+| 中文字体 | [26](26-fonts.md) | 604 个字体 / 89 个中文；`fc-match sans-serif:lang=zh` → **CJK JP** |
+| 打印 / 扫描 | [27](27-printing-scanning.md) | CUPS 2.4.16 active、avahi active、simple-scan 已装 |
+| 触摸板 / 手势 | [28](28-touchpad.md) | tap-to-click=true、natural-scroll=true、libinput quirks 目录 |
 
----
+## 2.1 仍然空白（优先级较低）
+
+| 领域 | 典型症状 | 建议 |
+|---|---|---|
+| **远程桌面 / VNC** | 想从别的机器连进来 | Wayland 下走 `gnome-remote-desktop` + RDP，与 VNC 方案不同 |
+| **多显示器缩放** | 外接屏与内置屏缩放不一致 | Mutter 的 fractional scaling，需要专门写 |
+| **系统备份 / 快照** | 想回滚一次坏更新 | Timeshift / btrfs 快照，本机 ext4 需 rsync 方案 |
+| **时间同步** | 时间漂移导致证书报错 | `timedatectl`、NTP 源 |
+| **虚拟机 / 容器** | KVM、Docker 与 snap 冲突 | 涉及 cgroup 与 AppArmor |
+| **专业音频** | 低延迟录音、JACK | PipeWire 的 JACK 兼容层 |
 
 ## 3. 这仓库**不打算**覆盖的
 

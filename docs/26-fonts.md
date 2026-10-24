@@ -1,0 +1,124 @@
+# 中文字体：显示成日文字形、发虚、粗体缺失
+
+> 返回索引：[README](../README.md) ｜ 相关：[13-daily-tips.md](13-daily-tips.md) ｜ 原始位置：新增（覆盖面补全）
+
+## 本机环境（实测）
+
+| 项 | 值 |
+|---|---|
+| 字体总数 | `fc-list \| wc -l` = **604** |
+| 中文字体 | `fc-list :lang=zh \| wc -l` = **89** |
+| **中文实际匹配** | `fc-match sans-serif:lang=zh` → **`NotoSansCJK-Regular.ttc: "Noto Sans CJK JP"`** |
+
+最后一行是重点：**系统给中文挑的是日文字体（JP）**。这正是"中文看起来怪、某些字是日式写法"的根源。
+
+---
+
+## 1. 三种表现，根因不同
+
+| 表现 | 原因 |
+|---|---|
+| 中文里部分字是**日式字形**（如「直」「骨」「次」的写法） | fontconfig 对 CJK 的族选择偏向 JP |
+| 中文**发虚/糊** | 无 hinting、缩放非整数、次像素渲染被关 |
+| **粗体缺失**（只有一种字重） | 只装了 Regular，没有 Bold；或字体族不匹配 |
+
+---
+
+## 2. 判断"到底用了哪个字体"
+
+```bash
+fc-match sans-serif:lang=zh          # 本机：Noto Sans CJK JP  ← 问题所在
+fc-match serif:lang=zh
+fc-match monospace:lang=zh
+
+# 看某个中文字体是否装了 SC 版本
+fc-list | grep -i "CJK SC" | head -3
+# 期望看到 NotoSansCJK-Regular.ttc 里包含 "Noto Sans CJK SC"
+```
+
+`fc-match` 的输出是**最终生效的字体**，比在设置里"选了某个字体"更可信（设置只是偏好，fontconfig 可能另有规则）。
+
+---
+
+## 3. 修复：让中文优先用 SC（简体）字形
+
+### 方案 1：写用户级 fontconfig 规则（推荐，可回滚）
+
+```bash
+mkdir -p ~/.config/fontconfig
+cat > ~/.config/fontconfig/fonts.conf <<'EOF'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <match target="pattern">
+    <test name="lang" compare="contains"><string>zh</string></test>
+    <edit name="family" mode="prepend" binding="strong">
+      <string>Noto Sans CJK SC</string>
+    </edit>
+  </match>
+  <match target="pattern">
+    <test name="lang" compare="contains"><string>zh</string></test>
+    <edit name="family" mode="append" binding="weak">
+      <string>Noto Serif CJK SC</string>
+    </edit>
+  </match>
+</fontconfig>
+EOF
+fc-cache -f
+fc-match sans-serif:lang=zh     # 期望：Noto Sans CJK SC
+```
+
+### 方案 2：补装简体专用字体
+
+```bash
+sudo apt install fonts-noto-cjk fonts-noto-cjk-extra
+# 或更轻的思源/文泉驿：
+sudo apt install fonts-wqy-microhei fonts-wqy-zenhei
+```
+
+### 方案 3：GNOME 设置里改
+
+`设置 → 外观 → 字体` 改成 `Noto Sans CJK SC`。注意：这只改桌面 UI 的默认族，**不会**影响浏览器/终端里按 `lang=zh` 的匹配——所以方案 1 更彻底。
+
+---
+
+## 4. 发虚 / 粗体缺失
+
+```bash
+# 当前渲染参数
+gsettings get org.gnome.desktop.interface text-scaling-factor   # 应为 1.0
+gsettings get org.gnome.desktop.interface font-antialiasing     # 常见：grayscale / rgba
+gsettings get org.gnome.desktop.interface font-hinting          # 常见：slight
+```
+
+- **缩放 1.25 时字发虚**：优先调字体大小，而不是继续拉 `text-scaling-factor`（非整数缩放会让字形重采样）。
+- **粗体缺失**：`fc-list | grep -i "CJK.*Bold"`，没有就装 `fonts-noto-cjk-extra`。
+- **等宽字体里的中文**：终端需要显式配置 fallback（如 `Noto Sans Mono CJK SC`），否则中文宽度不齐。
+
+---
+
+## 5. 无效尝试
+
+- **在 GNOME 设置里反复换字体**：只影响 UI 默认族，`fc-match sans-serif:lang=zh` 可能依然是 JP。
+- **删掉所有日文字体**：会影响其他应用，而且下次更新又回来；用 fontconfig 规则更精准。
+- **改 `/etc/fonts/fonts.conf`**：全局且升级会被覆盖，用户级 `~/.config/fontconfig/fonts.conf` 更安全。
+- **把 dpi 改成 96**：Wayland 下 DPI 由合成器缩放决定，改 X11 dpi 无效。
+
+---
+
+## 6. 速查
+
+| 症状 | 先看 |
+|---|---|
+| 中文是日式字形 | `fc-match sans-serif:lang=zh` 是否 JP |
+| 字发虚 | `text-scaling-factor`、`font-hinting` |
+| 粗体没了 | `fc-list \| grep -i Bold` |
+| 终端中文不对齐 | 等宽字体是否含 CJK |
+| 某应用字体和别的不一样 | 该应用是否自带字体目录（Electron/浏览器） |
+
+## 7. 经验
+
+1. **`fc-match` 是唯一可信的"实际字体"**，设置面板只是偏好。
+2. **CJK 是一个大字体文件（.ttc）含多语言子族**，装一个包不等于用对子族，要靠 fontconfig 明确指定 `SC`。
+3. **用户级规则优先于系统级**，升级不会丢。
+4. **缩放问题别用字体的办法解决**：先确认缩放是不是 1.25，再谈字体。

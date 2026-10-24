@@ -31,6 +31,13 @@
 | 19 | **没声音：PipeWire 的正确排查顺序** | [19-audio-pipewire.md](docs/19-audio-pipewire.md) | — |
 | 20 | **Wayland 屏幕共享 / 录屏黑屏** | [20-wayland-screenshare.md](docs/20-wayland-screenshare.md) | — |
 | 21 | **蓝牙：连不上 / 连上没声音 / 麦克风** | [21-bluetooth.md](docs/21-bluetooth.md) | — |
+| 22 | **系统更新后黑屏 / 掉驱动（NVIDIA + 内核）** | [22-nvidia-kernel-update.md](docs/22-nvidia-kernel-update.md) | — |
+| 23 | **电源与休眠：合盖不睡、睡死、续航** | [23-power-suspend.md](docs/23-power-suspend.md) | — |
+| 24 | **Wi-Fi 连不上、能 ping IP 不能解析域名** | [24-wifi-dns.md](docs/24-wifi-dns.md) | — |
+| 25 | **Snap / Flatpak 沙箱：读不到文件、打不开外置盘** | [25-flatpak-snap.md](docs/25-flatpak-snap.md) | — |
+| 26 | **中文字体：日文字形、发虚、粗体缺失** | [26-fonts.md](docs/26-fonts.md) | — |
+| 27 | **打印机 / 扫描仪不识别** | [27-printing-scanning.md](docs/27-printing-scanning.md) | — |
+| 28 | **触摸板：点击、滚动、误触、手势** | [28-touchpad.md](docs/28-touchpad.md) | — |
 | — | DSH 档案调优（缩放、插件去重、侧栏空按钮） | [dsh-profile-tuning.md](docs/dsh-profile-tuning.md) | [dsh/profile-config/](dsh/profile-config/) |
 | — | **经验总结（方法、教训、我犯过的错）** | [lessons.md](docs/lessons.md) | — |
 
