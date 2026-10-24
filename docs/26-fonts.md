@@ -68,6 +68,21 @@ fc-cache -f
 fc-match sans-serif:lang=zh     # 期望：Noto Sans CJK SC
 ```
 
+**本机已应用并验证（2026-10-24）**：
+
+```text
+$ fc-match sans-serif:lang=zh
+NotoSansCJK-Regular.ttc: "Noto Sans CJK SC" "Regular"     ← 改前是 "Noto Sans CJK JP"
+$ fc-match serif:lang=zh
+NotoSansCJK-Regular.ttc: "Noto Sans CJK SC" "Regular"
+$ fc-list | grep -c "CJK SC"
+16
+```
+
+注意：**已经打开的浏览器/终端可能仍用旧字体**（它们在启动时缓存了字体集），重启应用或新开窗口才会完全生效。
+
+回滚：删掉 `~/.config/fontconfig/fonts.conf`，再 `fc-cache -f`。
+
 ### 方案 2：补装简体专用字体
 
 ```bash
