@@ -13,6 +13,8 @@ minimumReleaseAgeExclude:
   - '@mrweicodes/dsh-loop-guard@1.0.8'
   - '@goodandready/dsh-key-limits@0.2.19'
   - 'dsh-prompt@0.3.0'
+  - '@michengai/dsh-code-review@1.0.2'
+  - '@michengai/dsh-simplify@1.0.3'
 overrides:
   '@deepseek-ai/dsh-storage-domain': 0.2.1-rc.2
 fetchRetries: 5

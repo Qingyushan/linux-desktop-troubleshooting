@@ -139,6 +139,37 @@ DSH_HOME=~/.dsh dsh plugin --profile better-deepseek-harness-codex \
 
 结果：依赖 36 → 34，bundle 38 → 36，组合树 354 个节点、0 条 `skipping`。
 
+### 2026-10-24 追加：Windows 专用插件一并清掉
+
+前一轮只删了重复的 B（`dsh-computer-use-win`），留下了 `dsh-computer-use` 和 `dsh-ops`。这轮按“Windows 专用的一律不留”继续清：
+
+| 插件 | 判定依据 | 处理 |
+|---|---|---|
+| `dsh-ops` 0.3.0 | `package.json` 里 `"os": ["win32"]`，只带 `*-win32-x64` 二进制 | `dsh plugin remove` |
+| `dsh-computer-use` 0.1.0 | Windows Computer Use（window2 + 浏览器控制）；配置行带 `process.platform !== 'win32'` 禁用 | `dsh plugin remove`，并删掉 `preset-computer-use` / `tool-computer-use` / `computer-use` 三个补丁行 |
+
+结果：dependencies 34 → 33、bundles 36 → 35、node_modules 168 → 166；`--dump-config` 仍然 0 条 `skipping`、0 条不兼容。
+
+补充结论（实测过）：
+
+- 删它们**不影响 Linux 上的任何功能**：dsh-ops 的 `ops_*` 工具从未注册，computer-use 的两行在 Linux 上本来就 disabled；
+- 扫过全部 166 个包，**没有其它插件依赖**这两个包；
+- 核心包 `pwsh-sandbox` / preset 内的 `tool-pwsh` 仍保留，靠 `process.platform !== 'win32'` 在 Linux 自动禁用——这属于平台开关，不是冗余。
+
+顺手同步了本轮升级的版本快照（`dsh/profile-config/package.json`）：
+
+| 插件 | 旧 | 新 |
+|---|---|---|
+| `@michengai/dsh-btw` | 0.1.15 | 1.0.5 |
+| `@michengai/dsh-simplify` | 0.1.12 | 1.0.3 |
+| `@michengai/dsh-code-review` | 1.0.1 | 1.0.2 |
+| `@michengai/dsh-codex-ui` | 1.1.25 | 1.1.48（当前 disabled，客户端入口在此运行时激活失败） |
+| `@michengai/dsh-agent-teams` | 0.1.22 | 0.1.26 |
+| `@modusensus/dsh-mneme` | 0.8.13 | 0.9.4 |
+| `dsh-prompt` | 0.3.0 | 0.4.38 |
+
+> 注意：`allow-version` 只绕过安装检查。`codex-ui@1.1.48` 装好但客户端 `web boot` 激活失败（客户端会切到 safe profile），已在 `cordis.patch.yml` 里禁用；`subagent-director@0.5.5` 则缺 `@deepseek-ai/dsh-subagent` 的 `settleRun` 导出，同样禁用。这类“装得上≠跑得起来”的坑：装完必须重启并查 `~/.local/share/dsh-tauri/logs/<profile>/dsh-web.log` 与 `desktop.log`，确认没有 `did not activate` / `failed to import` 才算通过。
+
 ---
 
 ## 6. 侧栏底部多出来的空按钮

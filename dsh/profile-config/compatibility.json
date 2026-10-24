@@ -16,5 +16,20 @@
   ],
   "@michengai/dsh-codex-ui@1.1.25": [
     "0.2.1-rc.2"
+  ],
+  "@michengai/dsh-btw@1.0.5": [
+    "0.2.1-rc.3"
+  ],
+  "@michengai/dsh-simplify@1.0.3": [
+    "0.2.1-rc.3"
+  ],
+  "@michengai/dsh-codex-ui@1.1.48": [
+    "0.2.1-rc.3"
+  ],
+  "@nanmicoder/dsh-agent-teams@0.1.26": [
+    "0.2.1-rc.3"
+  ],
+  "dsh-workbuddy-connect@0.7.9": [
+    "0.2.1-rc.3"
   ]
 }
