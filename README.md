@@ -25,6 +25,7 @@
 | 13 | 系统小习惯与日常命令 | [13-daily-tips.md](docs/13-daily-tips.md) | — |
 | 14 | 附录：常用检查命令 | [14-appendix-commands.md](docs/14-appendix-commands.md) | — |
 | 15 | 尚未解决 / 后续 | [15-unresolved.md](docs/15-unresolved.md) | — |
+| 16 | **Windows 分区（176 GB 卷）在「文件」里挂载失败** | [16-windows-dirty-volume.md](docs/16-windows-dirty-volume.md) | —（fstab 只读挂载） |
 | — | DSH 档案调优（缩放、插件去重、侧栏空按钮） | [dsh-profile-tuning.md](docs/dsh-profile-tuning.md) | [dsh/profile-config/](dsh/profile-config/) |
 | — | **经验总结（方法、教训、我犯过的错）** | [lessons.md](docs/lessons.md) | — |
 
@@ -60,6 +61,7 @@
 | DSH | 桌面端 0.25.0；Harness 内核 0.2.1-rc.2 |
 | 其它 | Steam 1.0.0.85、LX Music 2.12.6、QQ 3.2.32、微信 4.1.13.26 |
 | 游戏库 | 外部 SATA SSD `/dev/sda2`（NTFS，931 G），挂 `/mnt/G1`（`ntfs-3g`，fstab 开机挂载） |
+| 双系统 | 内部 NVMe `/dev/nvme0n1p3`（Windows，163.6 G）｜ `p4`（Ubuntu，74.5 G）；Windows 分区当前以**只读**挂到 `/mnt/win` |
 
 > 注意：下文很多问题都来自 **Steamcommunity_302（S302）**。它把 `github.com`、`store.steampowered.com` 等域名写进 `/etc/hosts` 指向 `127.0.0.1`，并在本机 443 端口用自签根证书做 TLS 中间人。系统证书库信任它，不代表每个应用都信任。
 
@@ -103,6 +105,7 @@
 │   ├── 13-daily-tips.md
 │   ├── 14-appendix-commands.md
 │   ├── 15-unresolved.md
+│   ├── 16-windows-dirty-volume.md
 │   └── dsh-profile-tuning.md
 ├── scripts/                  # 幂等修复脚本（都先备份再改）
 ├── gnome-extension/          # 本地 GNOME Shell 扩展源码
