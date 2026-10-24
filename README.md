@@ -514,6 +514,8 @@ billion-context, @changfenhuang/dsh-genui, dshmarket
 - `install-quiet-startup.sh`：安装 `quiet-startup@local` 扩展 + 3 个 autostart 入口，让 QQ / 微信 / DSH 登录后安静启动（窗口最小化到托盘）；源码在 `gnome-extension/`。
 - `fix-steam-ntfs-library.sh`：把 Steam 库路径对齐到开机挂载点、清掉同一块 NTFS 盘的重复挂载，修「兼容性工具失败」的复发根源。
 - `move-proton-app-to-ext4.sh <appid>`：把 Proton 游戏连同 Proton / Steam Linux Runtime 搬到内部 ext4 库（NTFS 上建不了符号链接，Proton 游戏跑不了）。
+- `proton-tools-on-ext4.sh [--revert]`：只把 Proton 工具搬到内部 ext4、并用 `STEAM_COMPAT_DATA_PATH` 把 Wine 前缀指过去，游戏本体留在 NTFS（推荐，占 2.4 G）。
+- `revert-ext4-migration.sh`：撤销整库迁移，把游戏与工具搬回 NTFS 库。
 
 > 使用前先读脚本；都会先备份。
 
@@ -775,51 +777,60 @@ grep "Loaded manifest for tool 1493710" ~/.steam/steam/logs/compat_log.txt | tai
 # https://github.com/ValveSoftware/steam-for-linux/issues/12655
 ```
 
-#### 12.4.2 NTFS 库的硬伤：建不了符号链接（Proton 游戏必须放 ext4）
+#### 12.4.2 NTFS 库的硬伤：符号链接时好时坏（工具与前缀必须放 ext4）
 
-修完「兼容性工具失败」后，游戏能拉到 Proton 容器，但 2 秒就退出：
+修好「兼容性工具失败」后，游戏能拉起 Proton 容器，但常常 2 秒就退出：
 
 ```
-pressure-vessel-wrap[9482]: E: Unable to create symlink "./etc/ssl/certs/cbf06781.0"
-in "/mnt/G1/.../SteamLinuxRuntime_4/var/tmp-.../usr": No such file or directory
+pressure-vessel-wrap: E: Unable to create symlink "./etc/ssl/certs/f30dd6ad.0"
+in "/mnt/G1/.../SteamLinuxRuntime_4/var/tmp-XXXXXX/usr": No such file or directory
 ```
 
-**实测结论**（本机 ntfs3，kernel 7.0.0-38）：NTFS 上**普通用户不能创建符号链接**，即使建普通文件和目录都正常：
+**最坑的一点：这个错不是"一直失败"，而是"时好时坏"**。同一挂载点、同一目录，用普通用户身份连续做符号链接测试：
 
-| 位置 | 建文件 | 建目录 | 建符号链接 |
-| --- | --- | --- | --- |
-| `/mnt/G1`（ntfs3） | OK | OK | **errno=2 ENOENT** |
-| `/tmp`（ext4） | OK | OK | OK |
-
-三套挂载选项都试过（用 `sudo bash` 跑测试脚本逐项验证，失败即回滚）：
-
-| 挂载选项 | 结果 |
+| 时间 | 结果 |
 | --- | --- |
-| `rw,nosuid,nodev,uid=1000,gid=1000,acl,iocharset=utf8,prealloc`（udisks 风格，无 umask） | symlink **FAIL** errno=2 |
-| `rw,uid=1000,gid=1000,umask=0000,acl,iocharset=utf8,prealloc` | symlink **FAIL** errno=2 |
-| `rw,uid=1000,gid=1000,dmask=0000,fmask=0000,acl,iocharset=utf8,prealloc` | symlink **FAIL** errno=2 |
+| 13:18 | 连续 5 次全部 OK |
+| 13:21 | 连续 4 次全部 FAIL（errno=2） |
+| 13:23 | 连续 5 次全部 OK |
 
-而 Steam Linux Runtime 的 pressure-vessel 容器、以及 Wine 前缀的 `dosdevices/*` 都**必须**建符号链接。所以：**Proton / Wine 游戏只能在 Linux 原生文件系统上跑**，这跟挂载参数无关。
+三套挂载选项（udisks 风格无 umask / `umask=0000` / `dmask=fmask=0000`）都出现过同样的跳变，**与挂载参数无关**，是 ntfs3 在这个卷上的行为不稳定。游戏启动那一刻如果正好落进"坏"的窗口，容器就起不来。
 
-> 顺带一个坑：这块盘之前被 udisks 挂在 `/run/media/qys/G1` 时确实能建符号链接，游戏也真的跑起来了 3 分半；换成 fstab 挂到 `/mnt/G1` 后就不行了。所以"能不能建链接"这件事本身也不稳定，把它当可靠依赖是不对的。
+> 所以"重复挂载时能跑"只是一次运气——启动瞬间恰好落在能建链接的窗口里。**不能当方案。**
 
-**修复：把游戏和兼容性工具搬到内部 ext4 库**（仓库脚本，幂等，会先校验大小再删旧副本）：
+### 开机自动挂载要不要留？
+
+**要留。** 它解决的是另一个真实问题：只靠 udisks 自动挂载时，重启后 `/run/media/$USER/G1` 这条路径会消失，Steam 库直接变成"路径不存在"（本次 12:53 重启后确实发生了）。fstab 开机挂载让库路径确定存在，这是对的。
+
+要注意的只有两点：
+
+- **只保留一个挂载点**（`/mnt/G1`），不要再叠一层 udisks 的 `/run/media/...`；两个入口会让"库路径到底在哪"变得不可预测。
+- 自动挂载**不是**符号链接失败的原因——同一挂载点自己就会时好时坏（见上表）。
+
+### 可靠做法：只把工具和前缀放 ext4（2.2 G，游戏本体留 NTFS）
 
 ```bash
-./scripts/move-proton-app-to-ext4.sh 2527500 --dry-run   # 预演：看会搬什么
-./scripts/move-proton-app-to-ext4.sh 2527500            # MiSide
+./scripts/proton-tools-on-ext4.sh            # 迁移
+./scripts/proton-tools-on-ext4.sh --revert   # 回滚
 ```
 
-它做四件事：
+原理：
 
-1. 关 Steam（兼容性工具和游戏文件都必须静态搬）；
-2. `cp -a` 游戏目录 + 该库里所有 `Proton*` / `SteamLinuxRuntime*` 工具到 `~/.steam/debian-installation/steamapps/common/`，并校验大小（低于源 95% 直接中止）；
-3. 复制对应的 `appmanifest_*.acf`，再删掉 NTFS 上的旧副本（同一 appid 不能同时存在于两个库）；
-4. 删掉 NTFS 上那个 `s:` 链接已失效的旧 Wine 前缀，重启 Steam。
+| 东西 | 放哪 | 为什么 |
+| --- | --- | --- |
+| Steam Linux Runtime 4.0 / Proton Experimental | 内部 ext4 | pressure-vessel 要在 `<runtime>/var/tmp-*/usr` 里建符号链接 |
+| Wine 前缀（`compatdata/<appid>/pfx`） | 内部 ext4 | `dosdevices/*` 全是符号链接 |
+| 游戏本体（MiSide 4.1 G） | 留在 NTFS | 只被读取，不建链接 |
 
-本次结果：内部库 `Loaded 4 apps`，`MiSideFull.exe` 从 ext4 启动并稳定运行，前缀重建在 `~/.steam/debian-installation/steamapps/compatdata/2527500/pfx`，`Command prefix for tool 1493710` 也指向内部盘。
+脚本给这个游戏写启动项，把前缀指到内部盘：
 
-**边界**：只有这一个游戏迁走了。NTFS 库上其它 Proton 游戏（Forza、战地、Watch_Dogs2 等）要玩就同样跑这个脚本；原生 Linux 游戏留在 NTFS 上没问题。想一劳永逸就把整个库放到 ext4 —— 但那是 800+ GB，需要另一块盘。
+```
+STEAM_COMPAT_DATA_PATH=/home/qys/.steam/debian-installation/steamapps/compatdata/2527500 %command%
+```
+
+本次实测：`MiSideFull.exe` 稳定运行（CPU ~57%）、窗口 3072×1728、`App Running` 不再回滚、`compat_log` 里没有新的符号链接错误，前缀建在 `~/.steam/debian-installation/steamapps/compatdata/2527500/pfx`，内部盘只多占 2.4 G。
+
+**边界**：其它 NTFS 上的 Proton 游戏可以复用同一套工具（工具是按 appid 全局查找的），但每个游戏都要单独加 `STEAM_COMPAT_DATA_PATH` 启动项，前缀各自建在 ext4 上。整库迁移到 ext4（`scripts/move-proton-app-to-ext4.sh`，约 7 G/游戏）仍然可用，但内部盘吃紧时没必要。
 
 #### 12.4.3 长期建议
 
