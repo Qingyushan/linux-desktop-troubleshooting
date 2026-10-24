@@ -274,3 +274,64 @@ DSH_HOME=~/.dsh dsh plugin --profile better-deepseek-harness-codex add @changfen
 
 - “渲染没生效”先分清两种情况：**模型没写对格式**，还是**客户端没装渲染器**。后者查 boot 载荷最快。
 - 整合包会替换掉宿主默认的一部分插件组合，换档案后要重新确认“上一套能力还在不在”，不要假定某个功能仍然可用。
+
+---
+
+## 11. 清理残留的 MCP 条目（`wincu`）
+
+### 症状
+
+设置 → MCP 面板里有一条 `wincu`，红色提示「连接失败：`process.execPath` not found on PATH」。点「检查」没用，旁边的「停用/启用」「编辑」「删除」能绕过，但根因还在。
+
+### 根因（两层）
+
+配置来自 `@deepseek-ai/dsh-mcp-client` 的一个 insert 块：
+
+```yaml
+- insert:
+    - id: mcp-dsh-computer-use-win
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: wincu
+        transport: stdio
+        command: !!js process.execPath
+        args:
+          - !!js process.getBuiltinModule('node:url').fileURLToPath(new
+            URL('node_modules/dsh-computer-use-win/mcp/server.mjs', baseUrl))
+        toolCallTimeoutMs: 60000
+        failOnStartupError: false
+```
+
+1. **`command` 处的 `!!js` 没有被求值**，启动器把字面字符串 `process.execPath` 当成可执行文件名去 `exec` → PATH 里当然没有，报 “not found on PATH”。
+2. **更根本的一层**：`dsh-computer-use-win` 这个包在 profile 里根本没装（只有 Linux 版 `dsh-computer-use`），`node_modules/dsh-computer-use-win/mcp/server.mjs` 不存在。所以把 command 改成真实 node 路径也没用——下一步会 `MODULE_NOT_FOUND`。
+
+这是典型的**删插件漏删配置**：插件的 insert 块留在 patch 层，宿主只要还在启动就会重放它。`failOnStartupError: false` 让这条失败不拖垮 DSH，所以它只表现为面板里一行红字。
+
+### 修复：两层都要删
+
+```bash
+cd ~/.dsh/profiles/<profile>
+
+# 1) 当前生效的完整配置：删除末尾的 - id: mcp-dsh-computer-use-win 整块
+# 2) 补丁层：删除末尾的 - insert: 块（否则下次合成会再加回来）
+# 注意这两块都在文件末尾，删到末尾即可；改前先备份：
+cp -a cordis.yml cordis.yml.bak-$(date +%H%M%S)
+cp -a cordis.patch.yml cordis.patch.yml.bak-$(date +%H%M%S)
+```
+
+验证（要看**组合后**的结果，而不是只 grep 一个文件）：
+
+```bash
+dsh --profile <profile> --dump-config > /tmp/dump.yml   # 必须 exit 0
+grep -c "wincu" /tmp/dump.yml            # 期望 0
+grep -c "dsh-mcp-client" /tmp/dump.yml   # 期望 0（清理干净）
+```
+
+生效：面板上的「重启」按钮，或重启 dsh；正在用同一 harness 的会话不需要重新登录。
+
+### 经验
+
+- **删插件 ≠ 删配置**。插件的 insert 块会留在 `cordis.patch.yml` 里被反复重放，必须连 patch 层一起删。
+- 判断“配置还在不在”要用 `--dump-config` 看组合结果，别只 grep 某个 yml——同一份配置有多层来源。
+- 顺手检查命令：`dsh --profile <profile> --dump-config | grep -n "mcp-client"`，重装 profile 后跑一遍就能发现这类残留。
+- 这种条目在 Linux 上没有可用形态（Windows 专用 MCP server），**删除**才是正确修复，改 command 只是把错误推迟一步。
