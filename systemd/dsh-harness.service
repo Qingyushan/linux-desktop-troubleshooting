@@ -1,0 +1,18 @@
+[Unit]
+Description=DSH Harness headless web (profile better-deepseek-harness-codex)
+After=network.target
+
+[Service]
+Type=simple
+Environment=DSH_HOME=/home/qys/.dsh
+Environment=PATH=/home/qys/.local/bin:/home/qys/.local/bin:/home/qys/.local/share/dsh-tauri/runtime/bin:/home/qys/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin
+Environment=HOME=/home/qys
+WorkingDirectory=/home/qys
+ExecStart=/home/qys/.local/share/dsh-tauri/runtime/bin/node --max-old-space-size=7695 /home/qys/.local/share/dsh-tauri/dependencies/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js --profile better-deepseek-harness-codex --port 3080
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+KillMode=mixed
+
+[Install]
+WantedBy=default.target

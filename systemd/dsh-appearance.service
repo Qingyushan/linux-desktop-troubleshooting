@@ -1,0 +1,10 @@
+[Unit]
+Description=Force DSH desktop appearance (blur off) at login
+
+[Service]
+Type=oneshot
+ExecStart=/home/qys/.local/bin/dsh-set-appearance --blur off
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target

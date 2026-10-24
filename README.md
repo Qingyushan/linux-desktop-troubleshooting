@@ -93,6 +93,10 @@
 | [proton-tools-on-ext4.sh](scripts/proton-tools-on-ext4.sh) | 备选：只把 Proton/Runtime + 前缀放内部 ext4（占 2.4 G），可 `--revert` |
 | [move-proton-app-to-ext4.sh](scripts/move-proton-app-to-ext4.sh) | 备选：把某个 Proton 游戏整体搬到内部 ext4 库 |
 | [revert-ext4-migration.sh](scripts/revert-ext4-migration.sh) | 撤销整库迁移，把游戏与工具搬回 NTFS |
+| [install-dsh-launchers.sh](scripts/install-dsh-launchers.sh) | 装好 DSH 的 `dsh-web`/`dsh-client` 启动器、桌面入口与 systemd 单元 |
+| [dsh-web.sh](scripts/dsh-web.sh) | 打开 Web 端（3080 不通就先拉起桌面客户端，等最多 90 秒） |
+| [dsh-client.sh](scripts/dsh-client.sh) | 启动桌面客户端（它是 3080 的唯一宿主，不再 stop 任何服务） |
+| [dsh-set-appearance.py](scripts/dsh-set-appearance.py) | 改客户端外观：`--blur on\|off`、`--opacity 0-100` |
 
 扩展源码在 [gnome-extension/](gnome-extension/)（`quiet-startup@local`），DSH 档案快照在 [dsh/profile-config/](dsh/profile-config/)。
 

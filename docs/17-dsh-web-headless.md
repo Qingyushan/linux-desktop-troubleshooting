@@ -12,6 +12,8 @@
 1. 后端改成**无头常驻**（跑 harness web 服务，不创建任何窗口）；
 2. 加一个**网页快捷方式**，点一下就能在 Firefox 里打开（后端没起会自动拉起）。
 
+> 仓库里对应的可复制实现：`scripts/install-dsh-launchers.sh`（一次装好 `dsh-web`、`dsh-client`、桌面入口与 systemd 单元）、`scripts/dsh-web.sh`、`scripts/dsh-client.sh`、`systemd/dsh-harness.service`、`systemd/dsh-appearance.service`。
+
 ## 改了哪些东西
 
 | 文件 | 作用 |
