@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Firefox Stale Cleanup
+Comment=清理上次注销后残留的 Firefox 进程，避免 profile 被锁
+Exec=/home/qys/.local/bin/firefox-stale-cleanup
+Terminal=false
+NoDisplay=true
+Hidden=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=10

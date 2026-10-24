@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""登录时清理“上一个会话残留”的 Firefox 进程。
+
+背景：注销后 Firefox 有时会挂到 systemd --user 下继续存活，仍占用 profile 锁；
+下次登录启动 Firefox 时会报 "already running but not responding"。
+
+判定：进程的启动时间早于当前 gnome-shell 的启动时间 → 视为上个会话的残留。
+用法：
+  firefox-stale-cleanup            # 正常清理
+  firefox-stale-cleanup --dry-run  # 只打印，不动手
+  firefox-stale-cleanup --shell-start <epoch秒>  # 测试用，指定参照时间
+"""
+from __future__ import annotations
+
+import argparse
+import glob
+import os
+import pathlib
+import signal
+import sys
+import time
+
+LOG = '/tmp/firefox-stale-cleanup.log'
+BOOT_TIME = time.clock_gettime(time.CLOCK_BOOTTIME)  # 单调时钟起点参考
+CLK_TCK = os.sysconf('SC_CLK_TCK')
+
+
+def log(msg: str) -> None:
+    line = f"[{time.strftime('%F %T')}] {msg}"
+    print(line)
+    try:
+        with open(LOG, 'a', encoding='utf-8') as f:
+            f.write(line + '\n')
+    except OSError:
+        pass
+
+
+def proc_start_epoch(pid: int) -> float | None:
+    """返回进程启动的“boot 后秒数”对应的时间戳（time.time 基准）。"""
+    try:
+        stat = pathlib.Path(f'/proc/{pid}/stat').read_text()
+    except OSError:
+        return None
+    # comm 里可能有空格/括号，取最后一个 ')' 之后的部分
+    rest = stat[stat.rfind(')') + 2:].split()
+    try:
+        start_ticks = int(rest[19])  # 第 22 字段 starttime
+    except (IndexError, ValueError):
+        return None
+    return time.time() - (BOOT_TIME - start_ticks / CLK_TCK)
+
+
+def read_comm(pid: int) -> str:
+    try:
+        return pathlib.Path(f'/proc/{pid}/comm').read_text().strip()
+    except OSError:
+        return ''
+
+
+def gnome_shell_start(override: float | None) -> float | None:
+    if override is not None:
+        return override
+    for pid_s in pathlib.Path('/proc').iterdir():
+        if not pid_s.name.isdigit():
+            continue
+        pid = int(pid_s.name)
+        if read_comm(pid) == 'gnome-shell':
+            return proc_start_epoch(pid)
+    return None
+
+
+def firefox_pids() -> list[int]:
+    out = []
+    for pid_s in pathlib.Path('/proc').iterdir():
+        if not pid_s.name.isdigit():
+            continue
+        pid = int(pid_s.name)
+        if read_comm(pid) in ('firefox', 'firefox-bin', 'crashhelper'):
+            out.append(pid)
+    return out
+
+
+def pids_firefox_left() -> bool:
+    return any(read_comm(p) in ('firefox', 'firefox-bin') for p in firefox_pids())
+
+
+def clean_profile_locks() -> list[str]:
+    removed = []
+    for base in glob.glob(os.path.expanduser('~/snap/firefox/common/.mozilla/firefox')) + \
+                glob.glob(os.path.expanduser('~/.mozilla/firefox')):
+        for prof in glob.glob(os.path.join(base, '*')):
+            for name in ('lock', '.parentlock'):
+                p = os.path.join(prof, name)
+                if os.path.lexists(p):
+                    try:
+                        os.unlink(p)
+                        removed.append(p)
+                    except OSError as exc:
+                        log(f'无法删除 {p}: {exc}')
+    return removed
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--shell-start', type=float, default=None, help='测试用：参照时间（epoch 秒）')
+    args = ap.parse_args()
+
+    shell_start = gnome_shell_start(args.shell_start)
+    if shell_start is None:
+        log('找不到 gnome-shell，跳过清理')
+        return 0
+    log(f'gnome-shell 启动于 {time.strftime("%F %T", time.localtime(shell_start))}')
+
+    targets: list[int] = []
+    for pid in firefox_pids():
+        st = proc_start_epoch(pid)
+        if st is None:
+            continue
+        if st < shell_start - 1:  # 留 1 秒容差
+            targets.append(pid)
+
+    if not targets:
+        log('没有上个会话残留的 Firefox 进程，无需清理')
+        return 0
+
+    log(f'发现 {len(targets)} 个上个会话残留进程: {sorted(targets)}')
+    if args.dry_run:
+        for pid in sorted(targets):
+            log(f'  [dry-run] 将结束 pid {pid} (comm={read_comm(pid)})')
+        return 0
+
+    for pid in sorted(targets):
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    for _ in range(20):
+        if not pids_firefox_left():
+            break
+        time.sleep(0.25)
+    for pid in sorted(targets):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    time.sleep(0.3)
+    log(f'剩余 Firefox 进程: {sum(1 for p in firefox_pids() if read_comm(p) in ("firefox", "firefox-bin"))}')
+
+    if not pids_firefox_left():
+        removed = clean_profile_locks()
+        log(f'清理 profile 锁文件 {len(removed)} 个: {removed}')
+    else:
+        log('仍有 Firefox 存活，保留锁文件不动')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -55,6 +55,8 @@
 | 没声音 / 设备切换（PipeWire） | [19](19-audio-pipewire.md) | `wpctl status` 三步定位；HDMI 无设备常属正常 |
 | Wayland 屏幕共享 / 录屏黑屏 | [20](20-wayland-screenshare.md) | portal + PipeWire 链路；X11 工具在 Wayland 抓不到 |
 | 蓝牙连不上 / 连上没声音 | [21](21-bluetooth.md) | A2DP vs HFP；rfkill 与 Powered 是两个开关 |
+| Dock 点击行为：单击预览 / 双击收起或弹出 | [32](32-ubuntu-dock-double-click.md) | 系统扩展没有双击设置；用户目录副本不生效；改后必须注销；API 异常会让单击全失效 |
+| 注销后 Firefox 打不开（profile 被锁） | [33](33-firefox-stale-lock.md) | 残留进程 PPID=systemd --user；先杀进程再清 lock/.parentlock；登录自启清理 |
 
 ### F. 方法与索引
 

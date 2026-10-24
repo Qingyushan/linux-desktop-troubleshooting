@@ -41,6 +41,8 @@
 | 29 | **DSH 日常改用 Web 端：客户端托管 3080 + 网页快捷方式（开机不弹客户端）** | [29-dsh-web-headless.md](docs/29-dsh-web-headless.md) | —（客户端托管 + 两个启动器） |
 | 30 | **NVIDIA 硬解：浏览器为什么用不上，mpv 怎么用 NVDEC** | [30-nvidia-video-decode.md](docs/30-nvidia-video-decode.md) | —（`~/.config/mpv/mpv.conf`） |
 | 31 | **DSH 菜单毛玻璃：半透明根因与重放脚本（含窗口不透明度持久化）** | [31-dsh-menu-frost.md](docs/31-dsh-menu-frost.md) | [dsh-menu-frost.sh](scripts/dsh-menu-frost.sh) |
+| 32 | **Dock 点击行为：单击预览、双击按状态收起/弹出（GNOME 50 扩展补丁，含三代翻车记录）** | [32-ubuntu-dock-double-click.md](docs/32-ubuntu-dock-double-click.md) | [ubuntu-dock-double-click.sh](scripts/ubuntu-dock-double-click.sh) |
+| 33 | **注销后 Firefox 打不开：上个会话残留进程锁着 profile** | [33-firefox-stale-lock.md](docs/33-firefox-stale-lock.md) | [firefox-stale-cleanup](scripts/firefox-stale-cleanup)、[.desktop](scripts/firefox-stale-cleanup.desktop) |
 | — | DSH 档案调优（缩放、插件去重、侧栏空按钮） | [dsh-profile-tuning.md](docs/dsh-profile-tuning.md) | [dsh/profile-config/](dsh/profile-config/) |
 | — | **经验总结（方法、教训、我犯过的错）** | [lessons.md](docs/lessons.md) | — |
 
@@ -62,6 +64,9 @@
 12. **系统级路径要"开机就存在"**：`/run/media/$USER/...` 是 tmpfs、登录后才有，重启后 Steam 库路径会直接消失；库路径要放 fstab 挂载的真实路径。
 13. **Wayland 下外部进程无法最小化别人的窗口**，要做"窗口收纳"只能写 GNOME Shell 扩展；且原生 Wayland 窗口的 `app_id` 晚于 `window-created` 提交，匹配要靠 pid 兜底。
 14. **root 权限按次授权**：`pkexec 命令` 每次弹密码框；多步操作写成一个脚本 `pkexec bash 脚本` 一次授权。NOPASSWD 只放行最小命令集。
+15. **改 GNOME 扩展先看 `gnome-extensions info` 的“路径”**：本机 GNOME 50 加载 `/usr/share/gnome-shell/extensions/...`，用户目录同名副本**不会生效**；改完必须注销（`ReloadExtension` 未实现）。
+16. **扩展里一行异常 = 整个回调失效**：`event.get_click_count()` 在 GNOME 50 不存在，`TypeError` 会让单击都没反应；先看 `journalctl --user | grep 'JS ERROR'`。
+17. **注销 ≠ 杀进程**：`PPID` 为 `systemd --user` 的 Firefox 会活到下次登录并锁住 profile；按“启动时间早于 gnome-shell”判据杀残留，再清锁。
 
 ## 环境
 

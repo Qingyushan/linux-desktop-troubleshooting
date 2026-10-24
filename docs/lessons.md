@@ -111,6 +111,24 @@ pressure-vessel 正是**多线程并发**创建 `usr/etc/ssl/certs/*` 的链接�
 
 ---
 
+### 10. 改扩展前，先确认 Shell 到底加载了哪份文件
+
+`gnome-extensions info <uuid>` 里有一行“路径”。本机 GNOME 50 加载的是 `/usr/share/gnome-shell/extensions/...`，放到用户目录的同名副本**完全不生效**——我按“用户级覆盖优先”的旧经验改了一份，测了半天“无效”，实际改的文件根本没被读。
+
+**为什么不能这样**：不同 GNOME 版本/发行版的加载优先级并不一致，靠猜不如一条 `gnome-extensions info`。另外本机 `ReloadExtension` 未实现，**扩展改动只能注销生效**。
+
+### 11. 照着旧代码猜 API，会被一行 TypeError 打回
+
+我在双击逻辑里用了 `event.get_click_count()`。这个 API 在 GNOME 50 的 `Clutter.get_current_event()` 返回对象上不存在，异常直接打断整个 `activate()`，表现成“连单击都没反应”。
+
+**正确的顺序**：先看 `journalctl --user | grep "JS ERROR"` 拿到真实报错 → 换成不依赖可疑 API 的实现（本例用 `GLib.get_monotonic_time()` 自己记时间差）→ 用 `try/catch` 包住，保证再出错也不会把基础交互弄坏。
+
+### 12. 注销不会替你杀进程
+
+注销后 Firefox 的 `PPID` 变成 `systemd --user`，进程继续活着并占着 profile 锁，下次登录就报 “already running but not responding”。**排查顺序**：先 `ps` 看启动时间和父进程，再决定杀进程；只删 `lock` / `.parentlock` 只会被重建。
+
+**固化**：写成登录清理脚本，判据是“进程启动时间早于当前 `gnome-shell`”，配 `--dry-run` 与“找不到 shell 就跳过”的保守策略。
+
 ## 三、我这次犯过的错（比结论更有价值）
 
 1. **三次把"路径/挂载参数"当根因**：`/run/media` 与 `/mnt` 的差别、`acl`/`umask` 的差别，都不是原因；真正的原因是驱动层的并发缺陷。
