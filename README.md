@@ -513,6 +513,7 @@ billion-context, @changfenhuang/dsh-genui, dshmarket
 - `fix-dsh-icon.sh`：为 DSH 生成新名字的用户图标并写入用户级 desktop 覆盖，修复 Dock / 应用菜单空白图标（不碰 `/usr/share`，可重复执行）。
 - `install-quiet-startup.sh`：安装 `quiet-startup@local` 扩展 + 3 个 autostart 入口，让 QQ / 微信 / DSH 登录后安静启动（窗口最小化到托盘）；源码在 `gnome-extension/`。
 - `fix-steam-ntfs-library.sh`：把 Steam 库路径对齐到开机挂载点、清掉同一块 NTFS 盘的重复挂载，修「兼容性工具失败」的复发根源。
+- `move-proton-app-to-ext4.sh <appid>`：把 Proton 游戏连同 Proton / Steam Linux Runtime 搬到内部 ext4 库（NTFS 上建不了符号链接，Proton 游戏跑不了）。
 
 > 使用前先读脚本；都会先备份。
 
@@ -774,7 +775,55 @@ grep "Loaded manifest for tool 1493710" ~/.steam/steam/logs/compat_log.txt | tai
 # https://github.com/ValveSoftware/steam-for-linux/issues/12655
 ```
 
-**长期建议**：NTFS 上的 Steam 库能跑（本次 Wine 前缀就建在 NTFS 上，372 MB，游戏正常启动），但 Valve 明确只支持 Linux 原生文件系统。Proton 游戏一多、或再来一次「兼容性工具失败」，把库迁到 ext4 分区是最省心的。
+#### 12.4.2 NTFS 库的硬伤：建不了符号链接（Proton 游戏必须放 ext4）
+
+修完「兼容性工具失败」后，游戏能拉到 Proton 容器，但 2 秒就退出：
+
+```
+pressure-vessel-wrap[9482]: E: Unable to create symlink "./etc/ssl/certs/cbf06781.0"
+in "/mnt/G1/.../SteamLinuxRuntime_4/var/tmp-.../usr": No such file or directory
+```
+
+**实测结论**（本机 ntfs3，kernel 7.0.0-38）：NTFS 上**普通用户不能创建符号链接**，即使建普通文件和目录都正常：
+
+| 位置 | 建文件 | 建目录 | 建符号链接 |
+| --- | --- | --- | --- |
+| `/mnt/G1`（ntfs3） | OK | OK | **errno=2 ENOENT** |
+| `/tmp`（ext4） | OK | OK | OK |
+
+三套挂载选项都试过（用 `sudo bash` 跑测试脚本逐项验证，失败即回滚）：
+
+| 挂载选项 | 结果 |
+| --- | --- |
+| `rw,nosuid,nodev,uid=1000,gid=1000,acl,iocharset=utf8,prealloc`（udisks 风格，无 umask） | symlink **FAIL** errno=2 |
+| `rw,uid=1000,gid=1000,umask=0000,acl,iocharset=utf8,prealloc` | symlink **FAIL** errno=2 |
+| `rw,uid=1000,gid=1000,dmask=0000,fmask=0000,acl,iocharset=utf8,prealloc` | symlink **FAIL** errno=2 |
+
+而 Steam Linux Runtime 的 pressure-vessel 容器、以及 Wine 前缀的 `dosdevices/*` 都**必须**建符号链接。所以：**Proton / Wine 游戏只能在 Linux 原生文件系统上跑**，这跟挂载参数无关。
+
+> 顺带一个坑：这块盘之前被 udisks 挂在 `/run/media/qys/G1` 时确实能建符号链接，游戏也真的跑起来了 3 分半；换成 fstab 挂到 `/mnt/G1` 后就不行了。所以"能不能建链接"这件事本身也不稳定，把它当可靠依赖是不对的。
+
+**修复：把游戏和兼容性工具搬到内部 ext4 库**（仓库脚本，幂等，会先校验大小再删旧副本）：
+
+```bash
+./scripts/move-proton-app-to-ext4.sh 2527500 --dry-run   # 预演：看会搬什么
+./scripts/move-proton-app-to-ext4.sh 2527500            # MiSide
+```
+
+它做四件事：
+
+1. 关 Steam（兼容性工具和游戏文件都必须静态搬）；
+2. `cp -a` 游戏目录 + 该库里所有 `Proton*` / `SteamLinuxRuntime*` 工具到 `~/.steam/debian-installation/steamapps/common/`，并校验大小（低于源 95% 直接中止）；
+3. 复制对应的 `appmanifest_*.acf`，再删掉 NTFS 上的旧副本（同一 appid 不能同时存在于两个库）；
+4. 删掉 NTFS 上那个 `s:` 链接已失效的旧 Wine 前缀，重启 Steam。
+
+本次结果：内部库 `Loaded 4 apps`，`MiSideFull.exe` 从 ext4 启动并稳定运行，前缀重建在 `~/.steam/debian-installation/steamapps/compatdata/2527500/pfx`，`Command prefix for tool 1493710` 也指向内部盘。
+
+**边界**：只有这一个游戏迁走了。NTFS 库上其它 Proton 游戏（Forza、战地、Watch_Dogs2 等）要玩就同样跑这个脚本；原生 Linux 游戏留在 NTFS 上没问题。想一劳永逸就把整个库放到 ext4 —— 但那是 800+ GB，需要另一块盘。
+
+#### 12.4.3 长期建议
+
+NTFS 用来放数据没问题，但**不要用来放 Steam 库里的 Proton 游戏**：工具清单读取、符号链接、可执行权限都会踩坑。Steam 官方也只支持 Linux 原生文件系统（[steam-for-linux#12655](https://github.com/ValveSoftware/steam-for-linux/issues/12655)）。
 
 ### 12.5 LX Music：音源先备份，再折腾
 
