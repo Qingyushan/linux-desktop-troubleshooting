@@ -1,4 +1,4 @@
-# 中文字体：显示成日文字形、发虚、粗体缺失
+# 中文字体：日文字形、发虚、粗体缺失、Steam 自绘窗口方块
 
 > 返回索引：[README](../README.md) ｜ 相关：[13-daily-tips.md](13-daily-tips.md) ｜ 原始位置：新增（覆盖面补全）
 
@@ -140,7 +140,7 @@ gsettings get org.gnome.desktop.interface font-hinting          # 常见：sligh
 
 ---
 
-## 5. 坑：`strong prepend` 会劫持拉丁字族（Arial → NotoSansCJK.ttc）
+## 8. 坑：`strong prepend` 会劫持拉丁字族（Arial → NotoSansCJK.ttc）
 
 ### 症状
 
@@ -219,7 +219,7 @@ fc-match 'sans-serif:lang=zh-cn' # → Noto Sans CJK SC（中文需求保留）�
 
 ---
 
-## 6. Steam 更新窗口中文变 ◆ 方块（应用内正常）
+## 9. Steam 更新窗口中文变 ◆ 方块（应用内正常）
 
 ### 症状
 

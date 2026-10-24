@@ -1,6 +1,6 @@
-# DSH 日常用 Web 端：无头服务 + 网页快捷方式（开机不弹客户端窗口）
+# DSH 日常用 Web 端：客户端托管 3080 + 网页快捷方式（开机不弹客户端窗口）
 
-> 返回索引：[README](../README.md) ｜ 相关脚本：无（用 systemd user 服务 + 两个启动器）
+> 返回索引：[README](../README.md) ｜ 相关脚本：[dsh-web.sh](../scripts/dsh-web.sh)、[dsh-client.sh](../scripts/dsh-client.sh)、[install-dsh-launchers.sh](../scripts/install-dsh-launchers.sh)、[systemd/](../systemd/)
 
 ## 为什么要这么改
 
