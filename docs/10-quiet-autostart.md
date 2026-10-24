@@ -128,3 +128,13 @@ sed -i 's/^X-GNOME-Autostart-enabled=true/X-GNOME-Autostart-enabled=false/' \
 - autostart 应用的窗口在登录阶段本来就会带焦点，「有焦点就让位」不能当通用规则用；正确做法是"刚压过就无视焦点、隔久了才让位"（`focusGraceSeconds`）。
 - 但"刚压过就无视焦点"如果做成**滑动**宽限，就会变成 500ms 一次的连击。正确做法是：宽限只从首次压制起算，且宽限结束后**焦点 = 永久让位**，两次压制之间再加最小间隔。
 - 别用"窗口有焦点就不压"当作首次命中的条件：autostart 的窗口本来就会拿焦点，加了这条等于一个都不压。正确做法是首次命中照压、只在"用户还原后"让位。
+
+## 现状（2026-10-24 晚调整）
+
+DSH 桌面客户端**已不再开机自启**（改为 systemd 无头服务跑 Web 端，见 [17-dsh-web-headless.md](17-dsh-web-headless.md)），所以：
+
+- 扩展的监控名单里**移除了** `deepseek-harness-desktop` / `deepseek-harness` / `dsh-tauri`；
+- `install-quiet-startup.sh` 也不再生成 DSH 的 autostart 入口；
+- 现在是 **QQ + 微信**两个应用"安静自启"，DSH 走无头服务 + 网页快捷方式。
+
+为什么必须移除：如果还留在名单里，你在登录后 5 分钟内**手动**用 `dsh-client` 打开客户端，窗口会被扩展立刻最小化——那正是你不想要的。

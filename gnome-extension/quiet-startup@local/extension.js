@@ -47,10 +47,10 @@ const DEFAULTS = {
     minRetryGapSeconds: 2,
     // 窗口名标识：先精确比对 wm_class / app_id，再做「长度 >= 4 且被包含」的模糊匹配
     // （覆盖 com.tencent.wechat / wechat-beta 这类变体；短标识如 qq 只做精确匹配）
+    // DSH 客户端已改为无头服务启动（见 docs/17），不在此列；
+    // 若你改成开机自启客户端并希望它安静进托盘，把 'deepseek-harness-desktop'
+    // 和 'deepseek-harness' 加回 apps，并把 '/opt/qq/qq' 那种进程片段也补上。
     apps: [
-        'deepseek-harness-desktop',
-        'deepseek-harness',
-        'dsh-tauri',
         'qq',
         'wechat',
         'weixin',
@@ -60,7 +60,6 @@ const DEFAULTS = {
     processes: [
         '/opt/qq/qq',
         'wechat',
-        'deepseek-harness-desktop',
     ],
 };
 

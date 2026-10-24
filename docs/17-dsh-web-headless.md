@@ -41,6 +41,10 @@ WantedBy=default.target
 
 > `PATH` 这条别省：systemd 服务的 PATH 是精简版，不带 `~/.local/bin` 的话，harness 里调用 `dsh` / `pnpm` / 自定义脚本会找不到命令。
 
+## 与 quiet-startup 扩展的关系
+
+改成无头服务后，`quiet-startup@local` 扩展的监控名单已经**移除 DSH**（只剩 QQ / 微信，见 [10-quiet-autostart.md](10-quiet-autostart.md)）。否则你手动开客户端时，窗口会在登录后 5 分钟窗口期内被扩展收进托盘。
+
 ## 常用命令
 
 ```bash

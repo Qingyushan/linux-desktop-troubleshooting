@@ -45,9 +45,6 @@ if [ ! -f "$CFG_DIR/config.json" ]; then
   "focusGraceSeconds": 10,
   "minRetryGapSeconds": 2,
   "apps": [
-    "deepseek-harness-desktop",
-    "deepseek-harness",
-    "dsh-tauri",
     "qq",
     "wechat",
     "weixin",
@@ -55,8 +52,7 @@ if [ ! -f "$CFG_DIR/config.json" ]; then
   ],
   "processes": [
     "/opt/qq/qq",
-    "wechat",
-    "deepseek-harness-desktop"
+    "wechat"
   ]
 }
 JSON
@@ -97,18 +93,8 @@ X-GNOME-Autostart-enabled=true
 X-GNOME-Autostart-Delay=12
 DESKTOP
 
-cat > "$AUTOSTART_DIR/deepseek-harness-desktop.desktop" <<'DESKTOP'
-[Desktop Entry]
-Type=Application
-Name=DeepSeek Harness Desktop
-Comment=DeepSeek Harness 桌面客户端（登录后安静启动，窗口最小化到托盘）
-Exec=/usr/bin/deepseek-harness-desktop
-Icon=deepseek-harness-desktop
-Terminal=false
-StartupNotify=false
-X-GNOME-Autostart-enabled=true
-X-GNOME-Autostart-Delay=5
-DESKTOP
+# DSH 桌面客户端已改为 systemd 无头服务启动（见 docs/17-dsh-web-headless.md），
+# 这里不再生成它的 autostart 入口；需要"开机弹客户端"时才手动加回。
 
 # 旧 AppImage 时代留下的重复入口会让 DSH 被拉两次，挪出 autostart 目录
 if [ -f "$AUTOSTART_DIR/Deepseek Harness Desktop.desktop" ]; then
